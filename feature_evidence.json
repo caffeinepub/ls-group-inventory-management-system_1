@@ -1,0 +1,23 @@
+{
+  "kind": "feature_evidence_report",
+  "features": [
+    {
+      "featureId": "feature-fix-the-stock-addition-logic-in-the-inventory-tab-so-that-the-correct-product-id-is-passed-along-with-the-quantity-when-the-add-button-is-clicked-the-failed-to-add-stock-product-not-found-or-invalid-quantity-error-must-no-longer-appear-when-adding-a-whole-number-quantity-e-g-100-to-any-product-e-g-indica-in-either-ls-pulses-or-ls-foods-llp",
+      "featureTitle": "Fix the stock addition logic in the Inventory tab so that the correct product ID is passed along with the quantity when the Add button is clicked. The 'Failed to add stock - product not found or invalid quantity' error must no longer appear when adding a whole-number quantity (e.g., 100) to any product (e.g., Indica) in either LS Pulses or LS Foods LLP.",
+      "files": [
+        "frontend/src/components/InventoryTab.tsx"
+      ],
+      "components": [
+        "core-infrastructure@1.0.2",
+        "shadcn-ui@1.0.0",
+        "build-template-react@1.0.0",
+        "initial-app@1.0.0",
+        "github-export-icp-cli@1.0.0"
+      ],
+      "testIds": [
+        "REQ-1"
+      ],
+      "confidence": "high"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "kind": "spec_vs_diff_report",
+  "version": "1.0",
+  "generatedAt": "2026-02-27T10:54:10.998Z",
+  "summary": "The diff addresses REQ-1 by fixing the plant key resolution in InventoryTab.tsx using a 4-step matching strategy (exact → case-insensitive → normalized → positional fallback), tightening quantity validation, and fixing boolean return-value checks in useQueries.ts so failures throw errors and trigger proper error toasts. These changes directly target the root cause of the 'Failed to add stock - product not found or invalid quantity' error by ensuring the correct product ID and plant key are passed to the backend mutation.",
+  "missing_requirements": [],
+  "hallucinated_features": [
+    {
+      "description": "Fixes applied to BardanaTab.tsx and RawMaterialsTab.tsx (ImmutableProduct to ProductView import fix, plant lookup fix, improved error handling)",
+      "reason": "The build request scoped the fix exclusively to the Inventory tab stock addition bug. Non-goals explicitly state not to fix other tab functionality unless directly related to the same root cause. While the root cause may be shared, the build request did not request changes to BardanaTab or RawMaterialsTab.",
+      "evidence": [
+        "frontend-file-summaries.txt"
+      ]
+    },
+    {
+      "description": "Fixes applied to OrdersTab.tsx (replacing ImmutableOrder with OrderView, fixing tuple destructuring for order fields)",
+      "reason": "The build request did not request any changes to the Orders tab or its data handling. This is outside the stated scope of fixing the Inventory tab stock addition bug.",
+      "evidence": [
+        "frontend-file-summaries.txt"
+      ]
+    }
+  ],
+  "confidence": 0.72,
+  "changed_files": [
+    "frontend-file-summaries.txt",
+    "frontend/src/components/InventoryTab.tsx",
+    "project_state.json"
+  ]
+}

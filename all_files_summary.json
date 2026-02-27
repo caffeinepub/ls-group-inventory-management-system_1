@@ -1,0 +1,22 @@
+{
+  "backend/main.mo": "Motoko actor defining the backend for LS Group Inventory Management System, with data types and CRUD operations for inventory, bardana, orders, tools/machinery, raw materials, and a change log across two plants.",
+  "feature_evidence.json": "Feature evidence report linking the stock addition bug fix (correct product ID passed on Add click) to InventoryTab.tsx, with high confidence and test ID REQ-1.",
+  "frontend-file-summaries.txt": "JSON document summarizing each frontend source file's purpose and key fixes, serving as a build-planning reference for the React frontend.",
+  "frontend/index.css": "Global Tailwind CSS entry point defining OKLCH-based CSS custom properties for light and dark themes including background, foreground, card, sidebar, and chart color tokens.",
+  "frontend/index.html": "HTML entry point for the React app, setting the page title to 'LS Group Inventory Management System' and mounting the app at the #root div.",
+  "frontend/src/App.tsx": "Root React component rendering the app header, a 6-tab navigation (Inventory, Bardana, Orders, Tools & Machinery, Raw Materials, Change Log), and a Toaster for notifications.",
+  "frontend/src/components/BardanaTab.tsx": "Bardana tab component displaying per-plant product stock tables with inline edit-and-save functionality, using useSetBardanaStock and ProductView types from the backend.",
+  "frontend/src/components/ChangeLogTab.tsx": "Read-only Change Log tab that fetches and displays inventory stock changes sorted newest-first, showing IST timestamp, plant, product, signed quantity change, and user.",
+  "frontend/src/components/InventoryTab.tsx": "React component that displays and manages finished-goods inventory across two plant sub-tabs, allowing users to add or remove stock quantities per product with sorted rows and toast notifications.",
+  "frontend/src/components/OrdersTab.tsx": "React component for managing sales orders in a table with inline add, edit, and delete functionality, converting between display strings and backend bigint/nanosecond formats.",
+  "frontend/src/components/RawMaterialsTab.tsx": "React component that shows raw material stock levels per plant in a table and allows inline editing to set absolute stock quantities via a backend mutation.",
+  "frontend/src/components/ToolsMachineryTab.tsx": "React component for managing a tools and machinery list with inline add, edit, and delete rows, persisting changes through backend mutation hooks.",
+  "frontend/src/hooks/useActor.ts": "Custom hook that creates and caches an ICP backend actor using the current Internet Identity, invalidating dependent queries whenever the actor instance changes.",
+  "frontend/src/hooks/useInternetIdentity.ts": "Provides an InternetIdentityProvider context and useInternetIdentity hook that manage AuthClient lifecycle, login/logout flow, and identity persistence for ICP Internet Identity authentication.",
+  "frontend/src/hooks/useQueries.ts": "Defines React Query hooks for all backend data operations including inventory (get/add/remove stock), bardana (get/set stock), and orders (get/add), with cache invalidation on mutations.",
+  "frontend/src/index.css": "Global CSS file that imports Google Fonts, sets up Tailwind directives, and defines OKLCH-based CSS custom properties for light and dark theme tokens including colors, sidebar, and header.",
+  "frontend/src/lib/utils.ts": "Utility functions for class merging (cn), nanosecond timestamp formatting/conversion to IST and date strings, and sorting products by quantity with zero-stock items at the bottom.",
+  "frontend/src/main.tsx": "React app entry point that mounts the app with QueryClientProvider and InternetIdentityProvider wrappers.",
+  "frontend/tailwind.config.js": "Tailwind CSS configuration extending the default theme with OKLCH CSS variable-based color tokens, custom fonts (Inter/Rajdhani), border radius, box shadow, and accordion keyframe animations.",
+  "project_state.json": "Project state metadata describing the inventory management app for LS Pulses/LS Foods LLP, tracking a known bug where stock addition fails due to incorrect product ID passing in the Inventory tab."
+}

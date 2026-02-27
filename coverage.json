@@ -1,0 +1,37 @@
+{
+  "kind": "coverage_report",
+  "version": "1.0",
+  "generatedAt": "2026-02-27T10:54:11.001Z",
+  "sources": {
+    "buildRequest": true,
+    "implementationPlan": true
+  },
+  "requirements": {
+    "total": 1,
+    "implemented": 1,
+    "items": [
+      {
+        "id": "REQ-1",
+        "summary": "Fix the stock addition logic in the Inventory tab so that the correct product ID is passed along with the quantity when the Add button is clicked. The 'Failed to add stock - product not found or invalid quantity' error must no longer appear when adding a whole-number quantity (e.g., 100) to any product (e.g., Indica) in either LS Pulses or LS Foods LLP.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/components/InventoryTab.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/components/InventoryTab.tsx"
+        ]
+      }
+    ]
+  },
+  "changedFiles": [
+    "build-request.json",
+    "feature_evidence.json",
+    "frontend-file-summaries.txt",
+    "frontend-implementation-plan.json",
+    "frontend/src/components/InventoryTab.tsx",
+    "project_state.json",
+    "scratch/component-selection.json",
+    "spec.md",
+    "spec_vs_diff_report.json"
+  ]
+}

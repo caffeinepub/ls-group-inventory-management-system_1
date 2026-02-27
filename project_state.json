@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1.0.0",
+  "projectStateVersion": 3,
+  "summary": "Inventory management app for LS Pulses and LS Foods LLP with stock management functionality. Currently fixing a bug where adding stock in the Inventory tab fails with 'product not found or invalid quantity' error due to product ID not being passed correctly.",
+  "architectural_notes": [],
+  "known_issues": [
+    "Adding stock in Inventory tab fails with 'Failed to add stock - product not found or invalid quantity' for all products in both LS Pulses and LS Foods LLP — product ID not passed correctly on Add button click"
+  ],
+  "isFixRequest": true,
+  "existing_features": [
+    {
+      "id": "feature-fix-the-stock-addition-logic-in-the-inventory-tab-so-that-the-correct-product-id-is-passed-along-with-the-quantity-when-the-add-button-is-clicked-the-failed-to-add-stock-product-not-found-or-invalid-quantity-error-must-no-longer-appear-when-adding-a-whole-number-quantity-e-g-100-to-any-product-e-g-indica-in-either-ls-pulses-or-ls-foods-llp",
+      "title": "Fix the stock addition logic in the Inventory tab so that the correct product ID is passed along with the quantity when the Add button is clicked. The 'Failed to add stock - product not found or invalid quantity' error must no longer appear when adding a whole-number quantity (e.g., 100) to any product (e.g., Indica) in either LS Pulses or LS Foods LLP.",
+      "reqIds": [
+        "REQ-1"
+      ],
+      "version": 1
+    }
+  ],
+  "new_feature_requests": [],
+  "gameProjectType": "none",
+  "projectName": "Fix stock addition bug in Inventory tab — product ID not passed correctly",
+  "clarification_mode": "instant",
+  "clarification_rounds": 0
+}

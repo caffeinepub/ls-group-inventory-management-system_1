@@ -1,0 +1,44 @@
+{
+  "kind": "build_request",
+  "title": "Fix stock addition bug in Inventory tab — product ID not passed correctly",
+  "priority": "high",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "Fix the stock addition logic in the Inventory tab so that the correct product ID is passed along with the quantity when the Add button is clicked. The 'Failed to add stock - product not found or invalid quantity' error must no longer appear when adding a whole-number quantity (e.g., 100) to any product (e.g., Indica) in either LS Pulses or LS Foods LLP.",
+      "target": "both",
+      "source": {
+        "messageIds": [
+          "msg-1",
+          "msg-2",
+          "msg-3"
+        ],
+        "quotes": [
+          "Failed to add stock- product not found or invalid quantity",
+          "For all products under Inventory same issue is happening for both LS Pulses and LS Foods LLP",
+          "the product ID is not being correctly passed to the backend"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Entering a positive whole-number quantity (e.g., 100) in the Quantity column for any product in the Inventory tab and clicking Add successfully updates the stock without an error toast.",
+        "The correct product ID for the selected row is passed to the backend addStock mutation.",
+        "The fix works for all products across both LS Pulses and LS Foods LLP plant sub-tabs.",
+        "No 'Failed to add stock - product not found or invalid quantity' error appears after a valid stock addition attempt.",
+        "The updated stock value is reflected in the inventory table after a successful add."
+      ]
+    }
+  ],
+  "constraints": [
+    "Do not change the backend data schema or existing public function signatures.",
+    "Do not modify files listed in frontend.immutablePaths."
+  ],
+  "nonGoals": [
+    "Adding new inventory features beyond fixing the stock addition bug.",
+    "Changing the UI layout or design of the Inventory tab.",
+    "Fixing stock removal or any other tab functionality unless directly related to the same root cause."
+  ],
+  "imageRequirements": {
+    "required": [],
+    "edits": []
+  }
+}

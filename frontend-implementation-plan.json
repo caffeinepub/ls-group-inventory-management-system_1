@@ -1,0 +1,25 @@
+{
+  "kind": "implementation_plan",
+  "version": "1.0",
+  "title": "Fix stock addition bug in Inventory tab — product ID not passed correctly",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "summary": "Fix the stock addition logic in the Inventory tab so that the correct product ID is passed when adding stock, eliminating the 'Failed to add stock - product not found or invalid quantity' error for valid quantities across all products in both plants",
+      "acceptanceCriteria": [
+        "Entering a positive whole-number quantity (e.g., 100) in the Quantity column for any product in the Inventory tab and clicking Add successfully updates the stock without an error toast.",
+        "The correct product ID for the selected row is passed to the backend addStock mutation.",
+        "The fix works for all products across both LS Pulses and LS Foods LLP plant sub-tabs.",
+        "No 'Failed to add stock - product not found or invalid quantity' error appears after a valid stock addition attempt.",
+        "The updated stock value is reflected in the inventory table after a successful add."
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/components/InventoryTab.tsx",
+          "operation": "modify",
+          "description": "Fix the handleAddStock function to correctly pass the product name (productName parameter) from the row context to the addStock mutation instead of passing an undefined or incorrect value. Ensure the product.name from the current row is captured and passed as the productName argument to mutations.addInventoryStock.mutate(). Verify that the plantId state variable correctly corresponds to the active tab (LS Pulses or LS Foods LLP) and is passed as the plant parameter. Review the table cell structure to ensure the quantity input value and product identifier are correctly bound to their respective row contexts."
+        }
+      ]
+    }
+  ]
+}
