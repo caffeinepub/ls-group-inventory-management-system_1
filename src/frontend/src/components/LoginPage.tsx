@@ -18,8 +18,12 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     setTimeout(() => {
-      const ok = login(username, password);
-      if (!ok) setError("Invalid username or password. Please try again.");
+      const result = login(username, password);
+      if (result === "blocked") {
+        setError("Your account has been blocked. Please contact an Admin.");
+      } else if (result === "invalid") {
+        setError("Invalid username or password. Please try again.");
+      }
       setLoading(false);
     }, 300);
   };

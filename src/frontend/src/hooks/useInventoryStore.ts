@@ -691,3 +691,149 @@ export function useToolsStore() {
 
   return { getTools, addTool, updateTool, deleteTool, reorderTool };
 }
+
+// ─── Bardana Calculation Helpers ─────────────────────────────────────────────
+
+/**
+ * Stores the user-entered "Added Bardana" value per plant/product.
+ * Each entry in the Added Bardana column accumulates (adds to existing total).
+ */
+function bardanaAddedKey(plant: string, product: string): string {
+  return `bardana_added_${plant}_${product}`;
+}
+
+export function getBardanaAdded(plant: string, product: string): number {
+  return readValue(bardanaAddedKey(plant, product));
+}
+
+export function addToBardanaAdded(
+  plant: string,
+  product: string,
+  amount: number,
+): void {
+  const current = getBardanaAdded(plant, product);
+  writeValue(bardanaAddedKey(plant, product), current + amount);
+}
+
+/**
+ * Accumulated inventory additions for bardana Current Stock calculation.
+ * Incremented whenever inventory is added for a plant/product.
+ */
+function bardanaAccumInvKey(plant: string, product: string): string {
+  return `bardana_accum_inv_${plant}_${product}`;
+}
+
+export function getBardanaAccumulatedInventory(
+  plant: string,
+  product: string,
+): number {
+  return readValue(bardanaAccumInvKey(plant, product));
+}
+
+export function addToBardanaAccumulatedInventory(
+  plant: string,
+  product: string,
+  amount: number,
+): void {
+  const current = getBardanaAccumulatedInventory(plant, product);
+  writeValue(bardanaAccumInvKey(plant, product), current + amount);
+}
+
+/**
+ * Maps an inventory product name to the corresponding bardana product name.
+ * Returns null if no bardana mapping exists.
+ */
+export function inventoryToBardanaProduct(invProduct: string): string | null {
+  // Direct matches
+  const directMatches = [
+    "Indica",
+    "Ghadi Green",
+    "Ghadi Red",
+    "L.S.",
+    "Bahubali",
+    "Kasturi",
+    "Uttam",
+    "Gajraj",
+    "Golden Tiger",
+  ];
+  if (directMatches.includes(invProduct)) return invProduct;
+  // No bardana equivalent for Tiranga Kutta, Tiranga Jarda, Khanda Rejection, etc.
+  return null;
+}
+
+/**
+ * Hook providing reactive access to bardana calculation values.
+ */
+export function useBardanaCalculations() {
+  const [, setVersion] = useState(0);
+  const bump = useCallback(() => setVersion((v) => v + 1), []);
+
+  const getAddedBardana = (plant: string, product: string): number =>
+    getBardanaAdded(plant, product);
+
+  const recordAddedBardana = (
+    plant: string,
+    product: string,
+    amount: number,
+  ): void => {
+    if (amount <= 0) return;
+    addToBardanaAdded(plant, product, amount);
+    bump();
+  };
+
+  const getAccumulatedInventory = (plant: string, product: string): number =>
+    getBardanaAccumulatedInventory(plant, product);
+
+  const computeCurrentStock = (
+    plant: string,
+    product: string,
+    actualStock: number,
+  ): number => {
+    const addedBardana = getBardanaAdded(plant, product);
+    const addedInventory = getBardanaAccumulatedInventory(plant, product);
+    return actualStock + addedBardana - addedInventory;
+  };
+
+  const getStockInWH = (plant: string, product: string): number =>
+    getBardanaStockInWH(plant, product);
+
+  const setStockInWH = (
+    plant: string,
+    product: string,
+    value: number,
+  ): void => {
+    setBardanaStockInWHValue(plant, product, value);
+    bump();
+  };
+
+  return {
+    getAddedBardana,
+    recordAddedBardana,
+    getAccumulatedInventory,
+    computeCurrentStock,
+    getStockInWH,
+    setStockInWH,
+  };
+}
+
+// ─── Bardana Stock in WH Helpers ─────────────────────────────────────────────
+
+/**
+ * Stores the "Stock in WH" (warehouse stock) value per plant/product in Bardana.
+ * This is an editable informational field displayed after the Product column.
+ */
+function bardanaStockInWHKey(plant: string, product: string): string {
+  return `bardana_wh_stock_${plant}_${product}`;
+}
+
+export function getBardanaStockInWH(plant: string, product: string): number {
+  return readValue(bardanaStockInWHKey(plant, product));
+}
+
+export function setBardanaStockInWHValue(
+  plant: string,
+  product: string,
+  value: number,
+): void {
+  writeValue(bardanaStockInWHKey(plant, product), Math.max(0, value));
+}

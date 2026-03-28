@@ -6,15 +6,23 @@ export interface User {
   username: string;
   password: string;
   role: UserRole;
+  blocked?: boolean;
 }
 
 interface AuthContextValue {
   currentUser: User | null;
   users: User[];
-  login: (username: string, password: string) => boolean;
+  login: (username: string, password: string) => "ok" | "blocked" | "invalid";
   logout: () => void;
   addUser: (username: string, password: string, role: UserRole) => boolean;
   deleteUser: (username: string) => void;
+  blockUser: (username: string) => void;
+  unblockUser: (username: string) => void;
+  changeCredentials: (
+    username: string,
+    newUsername: string,
+    newPassword: string,
+  ) => boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -47,16 +55,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(USERS_KEY, JSON.stringify(users));
   }, [users]);
 
-  const login = (username: string, password: string): boolean => {
+  const login = (
+    username: string,
+    password: string,
+  ): "ok" | "blocked" | "invalid" => {
     const user = users.find(
       (u) => u.username === username.toLowerCase() && u.password === password,
     );
-    if (user) {
-      setCurrentUser(user);
-      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
-      return true;
-    }
-    return false;
+    if (!user) return "invalid";
+    if (user.blocked) return "blocked";
+    setCurrentUser(user);
+    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
+    return "ok";
   };
 
   const logout = () => {
@@ -80,9 +90,63 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUsers((prev) => prev.filter((u) => u.username !== username));
   };
 
+  const blockUser = (username: string) => {
+    setUsers((prev) =>
+      prev.map((u) => (u.username === username ? { ...u, blocked: true } : u)),
+    );
+  };
+
+  const unblockUser = (username: string) => {
+    setUsers((prev) =>
+      prev.map((u) => (u.username === username ? { ...u, blocked: false } : u)),
+    );
+  };
+
+  const changeCredentials = (
+    username: string,
+    newUsername: string,
+    newPassword: string,
+  ): boolean => {
+    const normalizedNew = newUsername.toLowerCase().trim();
+    // Check if newUsername is taken by another user
+    if (
+      normalizedNew !== username &&
+      users.find((u) => u.username === normalizedNew)
+    )
+      return false;
+    setUsers((prev) =>
+      prev.map((u) =>
+        u.username === username
+          ? { ...u, username: normalizedNew, password: newPassword }
+          : u,
+      ),
+    );
+    // If the changed user is the current logged-in user, update session
+    if (currentUser?.username === username) {
+      const updated = {
+        ...currentUser,
+        username: normalizedNew,
+        password: newPassword,
+      };
+      setCurrentUser(updated);
+      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(updated));
+    }
+    return true;
+  };
+
   return (
     <AuthContext.Provider
-      value={{ currentUser, users, login, logout, addUser, deleteUser }}
+      value={{
+        currentUser,
+        users,
+        login,
+        logout,
+        addUser,
+        deleteUser,
+        blockUser,
+        unblockUser,
+        changeCredentials,
+      }}
     >
       {children}
     </AuthContext.Provider>

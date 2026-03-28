@@ -24,12 +24,14 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActor } from "@/hooks/useActor";
+import { useChangeLog } from "@/hooks/useChangeLog";
 import {
   BARDANA_PRODUCTS,
   PLANTS,
   branchBadgeClass,
   branchTabClass,
   sortProducts,
+  useBardanaCalculations,
   useBardanaStore,
 } from "@/hooks/useInventoryStore";
 import {
@@ -54,6 +56,9 @@ interface ShareCategories {
 
 function ConsolidatedBardana() {
   const { getAllProducts } = useBardanaStore();
+  const { computeCurrentStock, getAddedBardana, getStockInWH } =
+    useBardanaCalculations();
+
   const pulseProducts = getAllProducts("LS Pulses");
   const foodsProducts = getAllProducts("LS Foods LLP");
 
@@ -62,12 +67,29 @@ function ConsolidatedBardana() {
   for (const p of foodsProducts) nameSet.add(p.name);
 
   const merged = Array.from(nameSet).map((name) => {
-    const pulseQty = pulseProducts.find((p) => p.name === name)?.quantity ?? 0;
-    const foodsQty = foodsProducts.find((p) => p.name === name)?.quantity ?? 0;
-    return { name, quantity: pulseQty + foodsQty };
+    const pulseActual =
+      pulseProducts.find((p) => p.name === name)?.quantity ?? 0;
+    const foodsActual =
+      foodsProducts.find((p) => p.name === name)?.quantity ?? 0;
+    const pulseCS = computeCurrentStock("LS Pulses", name, pulseActual);
+    const foodsCS = computeCurrentStock("LS Foods LLP", name, foodsActual);
+    const pulseAB = getAddedBardana("LS Pulses", name);
+    const foodsAB = getAddedBardana("LS Foods LLP", name);
+    const pulseWH = getStockInWH("LS Pulses", name);
+    const foodsWH = getStockInWH("LS Foods LLP", name);
+    return {
+      name,
+      stockInWH: pulseWH + foodsWH,
+      initialStock: pulseActual + foodsActual,
+      currentStock: pulseCS + foodsCS,
+      addedBardana: pulseAB + foodsAB,
+    };
   });
 
-  const sorted = sortProducts(merged, BARDANA_PRODUCTS);
+  const sorted = sortProducts(
+    merged.map((m) => ({ name: m.name, quantity: m.initialStock })),
+    BARDANA_PRODUCTS,
+  ).map((p) => merged.find((m) => m.name === p.name)!);
 
   return (
     <>
@@ -81,8 +103,17 @@ function ConsolidatedBardana() {
               <th className="text-left px-4 py-2.5 font-semibold text-foreground">
                 Product
               </th>
-              <th className="text-center px-4 py-2.5 font-semibold text-foreground w-48">
-                Consolidated Stock
+              <th className="text-center px-4 py-2.5 font-semibold text-foreground w-36">
+                Stock in WH
+              </th>
+              <th className="text-center px-4 py-2.5 font-semibold text-foreground w-40">
+                Initial Stock
+              </th>
+              <th className="text-center px-4 py-2.5 font-semibold text-foreground w-40">
+                Current Stock
+              </th>
+              <th className="text-center px-4 py-2.5 font-semibold text-foreground w-40">
+                Added Bardana
               </th>
             </tr>
           </thead>
@@ -101,17 +132,44 @@ function ConsolidatedBardana() {
                 </td>
                 <td className="px-4 py-2.5 text-center">
                   <Badge
-                    variant={product.quantity > 0 ? "default" : "secondary"}
+                    variant={product.stockInWH > 0 ? "default" : "secondary"}
                     className={
-                      product.quantity > 0
+                      product.stockInWH > 0
+                        ? "bg-sky-100 text-sky-800 border border-sky-300 font-bold text-sm px-3"
+                        : "font-bold text-sm px-3"
+                    }
+                  >
+                    {product.stockInWH}
+                  </Badge>
+                </td>
+                <td className="px-4 py-2.5 text-center">
+                  <Badge
+                    variant={product.initialStock > 0 ? "default" : "secondary"}
+                    className={
+                      product.initialStock > 0
                         ? "bg-purple-100 text-purple-800 border border-purple-300 font-bold text-sm px-3"
                         : "font-bold text-sm px-3"
                     }
                   >
-                    {product.quantity % 1 === 0
-                      ? product.quantity.toFixed(0)
-                      : product.quantity}
+                    {product.initialStock}
                   </Badge>
+                </td>
+                <td className="px-4 py-2.5 text-center">
+                  <Badge
+                    variant={product.currentStock > 0 ? "default" : "secondary"}
+                    className={
+                      product.currentStock > 0
+                        ? "bg-green-100 text-green-800 border border-green-300 font-bold text-sm px-3"
+                        : "font-bold text-sm px-3"
+                    }
+                  >
+                    {product.currentStock}
+                  </Badge>
+                </td>
+                <td className="px-4 py-2.5 text-center">
+                  <span className="text-sm text-muted-foreground">
+                    {product.addedBardana > 0 ? product.addedBardana : "—"}
+                  </span>
                 </td>
               </tr>
             ))}
@@ -120,7 +178,7 @@ function ConsolidatedBardana() {
       </div>
       <div className="px-4 py-2.5 border-t border-border bg-purple-50/40">
         <p className="text-xs text-purple-700 font-medium">
-          Consolidated values = LS Pulses + LS Foods LLP
+          Current Stock = LS Pulses Current Stock + LS Foods LLP Current Stock
         </p>
       </div>
     </>
@@ -135,38 +193,76 @@ function PlantBardana({ plantKey }: { plantKey: string }) {
     deleteProduct,
     reorderProduct,
   } = useBardanaStore();
+  const {
+    computeCurrentStock,
+    recordAddedBardana,
+    getAddedBardana,
+    getStockInWH,
+    setStockInWH,
+  } = useBardanaCalculations();
   const { currentUser } = useAuth();
   const { actor } = useActor();
+  const { logBardanaChange } = useChangeLog();
   const [editingProduct, setEditingProduct] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>("");
+  const [editingWHProduct, setEditingWHProduct] = useState<string | null>(null);
+  const [editWHValue, setEditWHValue] = useState<string>("");
+  const [addingBardanaFor, setAddingBardanaFor] = useState<string | null>(null);
+  const [bardanaInputValue, setBardanaInputValue] = useState<string>("");
   const [showAddRow, setShowAddRow] = useState(false);
   const [newProductName, setNewProductName] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const bardanaInputRef = useRef<HTMLInputElement>(null);
 
   const isAdmin = currentUser?.role === "admin";
-
   const products = getOrderedProducts(plantKey);
 
+  // ── Initial Stock (formerly Actual Stock) editing ────────────────────────
   const startEdit = (productName: string, currentQty: number) => {
     setEditingProduct(productName);
     setEditValue(String(currentQty));
   };
-
   const cancelEdit = () => {
     setEditingProduct(null);
     setEditValue("");
   };
-
   const saveEdit = (productName: string) => {
     const qty = Number.parseFloat(editValue);
     if (Number.isNaN(qty) || qty < 0) {
       toast.error("Value must be a non-negative number");
       return;
     }
+    const prevQty =
+      getOrderedProducts(plantKey).find((p) => p.name === productName)
+        ?.quantity ?? 0;
+    const oldCS = computeCurrentStock(plantKey, productName, prevQty);
 
     setStock(plantKey, productName, qty);
-    toast.success(`Updated ${productName} stock to ${qty}`);
+    toast.success(`Updated ${productName} initial stock to ${qty}`);
+
+    const userId = currentUser?.username ?? "unknown";
+    logBardanaChange(
+      plantKey,
+      productName,
+      "Initial Stock",
+      prevQty,
+      qty,
+      userId,
+    );
+
+    const newCS = computeCurrentStock(plantKey, productName, qty);
+    if (oldCS !== newCS) {
+      logBardanaChange(
+        plantKey,
+        productName,
+        "Current Stock",
+        oldCS,
+        newCS,
+        userId,
+      );
+    }
+
     setEditingProduct(null);
     setEditValue("");
 
@@ -175,12 +271,84 @@ function PlantBardana({ plantKey }: { plantKey: string }) {
     }
   };
 
+  // ── Stock in WH editing ──────────────────────────────────────────────────
+  const startEditWH = (productName: string) => {
+    setEditingWHProduct(productName);
+    setEditWHValue(String(getStockInWH(plantKey, productName)));
+  };
+  const cancelEditWH = () => {
+    setEditingWHProduct(null);
+    setEditWHValue("");
+  };
+  const saveEditWH = (productName: string) => {
+    const val = Number.parseFloat(editWHValue);
+    if (Number.isNaN(val) || val < 0) {
+      toast.error("Value must be a non-negative number");
+      return;
+    }
+    setStockInWH(plantKey, productName, val);
+    toast.success(`Updated ${productName} Stock in WH to ${val}`);
+    setEditingWHProduct(null);
+    setEditWHValue("");
+  };
+
+  // ── Added Bardana editing ────────────────────────────────────────────────
+  const startAddBardana = (productName: string) => {
+    setAddingBardanaFor(productName);
+    setBardanaInputValue("");
+    setTimeout(() => bardanaInputRef.current?.focus(), 50);
+  };
+  const cancelAddBardana = () => {
+    setAddingBardanaFor(null);
+    setBardanaInputValue("");
+  };
+  const saveAddBardana = (productName: string, productQty: number) => {
+    const val = Number.parseFloat(bardanaInputValue);
+    if (Number.isNaN(val) || val < 0) {
+      toast.error("Value must be a non-negative number");
+      return;
+    }
+    if (val === 0) {
+      cancelAddBardana();
+      return;
+    }
+    const oldAB = getAddedBardana(plantKey, productName);
+    const oldCS = computeCurrentStock(plantKey, productName, productQty);
+    recordAddedBardana(plantKey, productName, val);
+    const newAB = oldAB + val;
+    const newCS = computeCurrentStock(plantKey, productName, productQty);
+
+    const userId = currentUser?.username ?? "unknown";
+    logBardanaChange(
+      plantKey,
+      productName,
+      "Added Bardana",
+      oldAB,
+      newAB,
+      userId,
+    );
+    if (oldCS !== newCS) {
+      logBardanaChange(
+        plantKey,
+        productName,
+        "Current Stock",
+        oldCS,
+        newCS,
+        userId,
+      );
+    }
+
+    toast.success(`Added ${val} bardana for ${productName}`);
+    setAddingBardanaFor(null);
+    setBardanaInputValue("");
+  };
+
+  // ── Add / Delete products ────────────────────────────────────────────────
   const handleShowAddRow = () => {
     setShowAddRow(true);
     setNewProductName("");
     setTimeout(() => inputRef.current?.focus(), 50);
   };
-
   const handleAddProduct = () => {
     const trimmed = newProductName.trim();
     if (!trimmed) {
@@ -196,12 +364,10 @@ function PlantBardana({ plantKey }: { plantKey: string }) {
       toast.error(`"${trimmed}" already exists in this plant's bardana`);
     }
   };
-
   const handleCancelAdd = () => {
     setShowAddRow(false);
     setNewProductName("");
   };
-
   const handleConfirmDelete = () => {
     if (!deleteConfirm) return;
     deleteProduct(plantKey, deleteConfirm);
@@ -209,9 +375,8 @@ function PlantBardana({ plantKey }: { plantKey: string }) {
     setDeleteConfirm(null);
   };
 
-  // Admin column count: #, Product, Stock, EditStock, Action, Reorder, Delete = 7
-  // Staff column count: #, Product, Stock, EditStock, Action, Reorder = 6
-  const colSpan = isAdmin ? 7 : 6;
+  // Column count: #, Product, Stock in WH, Initial Stock, Action, Current Stock, Added Bardana, Order, [Delete]
+  const colSpan = isAdmin ? 9 : 8;
 
   return (
     <>
@@ -225,14 +390,20 @@ function PlantBardana({ plantKey }: { plantKey: string }) {
               <th className="text-left px-4 py-2.5 font-semibold text-foreground">
                 Product
               </th>
-              <th className="text-center px-4 py-2.5 font-semibold text-foreground w-40">
-                Current Stock
+              <th className="text-center px-4 py-2.5 font-semibold text-foreground w-36">
+                Stock in WH
               </th>
-              <th className="text-center px-4 py-2.5 font-semibold text-foreground w-56">
-                Edit Stock
+              <th className="text-center px-4 py-2.5 font-semibold text-foreground w-40">
+                Initial Stock
               </th>
               <th className="text-center px-4 py-2.5 font-semibold text-foreground w-32">
                 Action
+              </th>
+              <th className="text-center px-4 py-2.5 font-semibold text-foreground w-40">
+                Current Stock
+              </th>
+              <th className="text-center px-4 py-2.5 font-semibold text-foreground w-44">
+                Added Bardana
               </th>
               <th className="text-center px-4 py-2.5 font-semibold text-foreground w-20">
                 Order
@@ -245,138 +416,257 @@ function PlantBardana({ plantKey }: { plantKey: string }) {
             </tr>
           </thead>
           <tbody>
-            {products.map((product, idx) => (
-              <tr
-                key={product.name}
-                data-ocid={`bardana.item.${idx + 1}`}
-                className="border-b border-border hover:bg-muted/30 transition-colors"
-              >
-                <td className="px-4 py-2.5 text-muted-foreground text-xs">
-                  {idx + 1}
-                </td>
-                <td className="px-4 py-2.5 font-medium text-foreground">
-                  {product.name}
-                </td>
-                <td className="px-4 py-2.5 text-center">
-                  <Badge
-                    variant={product.quantity > 0 ? "default" : "secondary"}
-                    className={
-                      product.quantity > 0
-                        ? "bg-blue-100 text-blue-800 border-blue-200 font-bold text-sm px-3"
-                        : "font-bold text-sm px-3"
-                    }
-                  >
-                    {product.quantity % 1 === 0
-                      ? product.quantity.toFixed(0)
-                      : product.quantity}
-                  </Badge>
-                </td>
-                <td className="px-4 py-2.5 text-center">
-                  {editingProduct === product.name ? (
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      className="w-32 mx-auto text-center h-8 text-sm"
-                      data-ocid="bardana.input"
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") saveEdit(product.name);
-                        if (e.key === "Escape") cancelEdit();
-                      }}
-                    />
-                  ) : (
-                    <span className="text-muted-foreground text-xs">—</span>
-                  )}
-                </td>
-                <td className="px-4 py-2.5 text-center">
-                  {editingProduct === product.name ? (
-                    <div className="flex items-center justify-center gap-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 px-2 border-green-400 text-green-700 hover:bg-green-50"
-                        data-ocid={`bardana.save_button.${idx + 1}`}
-                        onClick={() => saveEdit(product.name)}
-                      >
-                        <Check className="w-3 h-3" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 px-2 border-red-400 text-red-700 hover:bg-red-50"
-                        data-ocid={`bardana.cancel_button.${idx + 1}`}
-                        onClick={cancelEdit}
-                      >
-                        <X className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 px-3 text-xs"
-                      data-ocid={`bardana.edit_button.${idx + 1}`}
-                      onClick={() => startEdit(product.name, product.quantity)}
-                    >
-                      <Pencil className="w-3 h-3 mr-1" />
-                      Edit
-                    </Button>
-                  )}
-                </td>
-                <td className="px-4 py-2.5 text-center">
-                  <div className="flex items-center justify-center gap-1">
-                    <button
-                      type="button"
-                      disabled={idx === 0}
-                      onClick={() =>
-                        reorderProduct(plantKey, product.name, "up")
-                      }
-                      className="inline-flex items-center justify-center w-7 h-7 rounded
-                        bg-muted text-muted-foreground border border-border
-                        hover:bg-accent hover:text-accent-foreground
-                        disabled:opacity-30 disabled:cursor-not-allowed
-                        transition-all duration-150 cursor-pointer"
-                      title="Move up"
-                    >
-                      <ArrowUp className="w-3 h-3" />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={idx === products.length - 1}
-                      onClick={() =>
-                        reorderProduct(plantKey, product.name, "down")
-                      }
-                      className="inline-flex items-center justify-center w-7 h-7 rounded
-                        bg-muted text-muted-foreground border border-border
-                        hover:bg-accent hover:text-accent-foreground
-                        disabled:opacity-30 disabled:cursor-not-allowed
-                        transition-all duration-150 cursor-pointer"
-                      title="Move down"
-                    >
-                      <ArrowDown className="w-3 h-3" />
-                    </button>
-                  </div>
-                </td>
-                {isAdmin && (
-                  <td className="px-4 py-2.5 text-center">
-                    <button
-                      type="button"
-                      onClick={() => setDeleteConfirm(product.name)}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-md
-                        bg-red-50 text-red-600 border border-red-200
-                        hover:bg-red-100 hover:border-red-400
-                        transition-all duration-150 cursor-pointer"
-                      title={`Delete ${product.name}`}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+            {products.map((product, idx) => {
+              const currentStock = computeCurrentStock(
+                plantKey,
+                product.name,
+                product.quantity,
+              );
+              const addedBardana = getAddedBardana(plantKey, product.name);
+              const stockInWH = getStockInWH(plantKey, product.name);
+              return (
+                <tr
+                  key={product.name}
+                  data-ocid={`bardana.item.${idx + 1}`}
+                  className="border-b border-border hover:bg-muted/30 transition-colors"
+                >
+                  <td className="px-4 py-2.5 text-muted-foreground text-xs">
+                    {idx + 1}
                   </td>
-                )}
-              </tr>
-            ))}
+                  <td className="px-4 py-2.5 font-medium text-foreground">
+                    {product.name}
+                  </td>
+
+                  {/* Stock in WH (editable) */}
+                  <td className="px-4 py-2.5 text-center">
+                    {editingWHProduct === product.name ? (
+                      <div className="flex items-center justify-center gap-1">
+                        <Input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={editWHValue}
+                          onChange={(e) => setEditWHValue(e.target.value)}
+                          className="w-24 text-center h-8 text-sm"
+                          data-ocid="bardana.input"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveEditWH(product.name);
+                            if (e.key === "Escape") cancelEditWH();
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 border-green-400 text-green-700 hover:bg-green-50"
+                          onClick={() => saveEditWH(product.name)}
+                        >
+                          <Check className="w-3 h-3" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 border-red-400 text-red-700 hover:bg-red-50"
+                          onClick={cancelEditWH}
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="inline-flex items-center justify-center gap-1 px-3 h-7 rounded-md border border-dashed border-sky-400 bg-sky-50 text-sky-700 text-xs hover:bg-sky-100 transition-colors cursor-pointer"
+                        onClick={() => startEditWH(product.name)}
+                        title="Click to edit Stock in WH"
+                      >
+                        <Pencil className="w-3 h-3" />
+                        {stockInWH > 0 ? stockInWH : "Set"}
+                      </button>
+                    )}
+                  </td>
+
+                  {/* Initial Stock (formerly Actual Stock) */}
+                  <td className="px-4 py-2.5 text-center">
+                    {editingProduct === product.name ? (
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        className="w-28 mx-auto text-center h-8 text-sm"
+                        data-ocid="bardana.input"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveEdit(product.name);
+                          if (e.key === "Escape") cancelEdit();
+                        }}
+                      />
+                    ) : (
+                      <Badge
+                        variant={product.quantity > 0 ? "default" : "secondary"}
+                        className={
+                          product.quantity > 0
+                            ? "bg-blue-100 text-blue-800 border-blue-200 font-bold text-sm px-3"
+                            : "font-bold text-sm px-3"
+                        }
+                      >
+                        {product.quantity % 1 === 0
+                          ? product.quantity.toFixed(0)
+                          : product.quantity}
+                      </Badge>
+                    )}
+                  </td>
+
+                  {/* Action column */}
+                  <td className="px-4 py-2.5 text-center">
+                    {editingProduct === product.name ? (
+                      <div className="flex items-center justify-center gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 border-green-400 text-green-700 hover:bg-green-50"
+                          data-ocid={`bardana.save_button.${idx + 1}`}
+                          onClick={() => saveEdit(product.name)}
+                        >
+                          <Check className="w-3 h-3" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 border-red-400 text-red-700 hover:bg-red-50"
+                          data-ocid={`bardana.cancel_button.${idx + 1}`}
+                          onClick={cancelEdit}
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-3 text-xs"
+                        data-ocid={`bardana.edit_button.${idx + 1}`}
+                        onClick={() =>
+                          startEdit(product.name, product.quantity)
+                        }
+                      >
+                        <Pencil className="w-3 h-3 mr-1" />
+                        Edit
+                      </Button>
+                    )}
+                  </td>
+
+                  {/* Current Stock (calculated) */}
+                  <td className="px-4 py-2.5 text-center">
+                    <Badge
+                      variant={currentStock > 0 ? "default" : "secondary"}
+                      className={
+                        currentStock > 0
+                          ? "bg-green-100 text-green-800 border border-green-300 font-bold text-sm px-3"
+                          : "font-bold text-sm px-3"
+                      }
+                    >
+                      {currentStock % 1 === 0
+                        ? currentStock.toFixed(0)
+                        : currentStock}
+                    </Badge>
+                  </td>
+
+                  {/* Added Bardana (editable, accumulates) */}
+                  <td className="px-4 py-2.5 text-center">
+                    {addingBardanaFor === product.name ? (
+                      <div className="flex items-center justify-center gap-1">
+                        <Input
+                          ref={bardanaInputRef}
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={bardanaInputValue}
+                          onChange={(e) => setBardanaInputValue(e.target.value)}
+                          className="w-24 text-center h-8 text-sm"
+                          data-ocid="bardana.input"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter")
+                              saveAddBardana(product.name, product.quantity);
+                            if (e.key === "Escape") cancelAddBardana();
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 border-green-400 text-green-700 hover:bg-green-50"
+                          onClick={() =>
+                            saveAddBardana(product.name, product.quantity)
+                          }
+                        >
+                          <Check className="w-3 h-3" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 border-red-400 text-red-700 hover:bg-red-50"
+                          onClick={cancelAddBardana}
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="inline-flex items-center justify-center gap-1.5 px-3 h-7 rounded-md border border-dashed border-amber-400 bg-amber-50 text-amber-700 text-xs hover:bg-amber-100 transition-colors cursor-pointer"
+                        data-ocid={`bardana.add_bardana_button.${idx + 1}`}
+                        onClick={() => startAddBardana(product.name)}
+                      >
+                        <Plus className="w-3 h-3" />
+                        {addedBardana > 0 ? addedBardana : "Add"}
+                      </button>
+                    )}
+                  </td>
+
+                  {/* Reorder */}
+                  <td className="px-4 py-2.5 text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() =>
+                          reorderProduct(plantKey, product.name, "up")
+                        }
+                        className="inline-flex items-center justify-center w-7 h-7 rounded bg-muted text-muted-foreground border border-border hover:bg-accent hover:text-accent-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 cursor-pointer"
+                        title="Move up"
+                      >
+                        <ArrowUp className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === products.length - 1}
+                        onClick={() =>
+                          reorderProduct(plantKey, product.name, "down")
+                        }
+                        className="inline-flex items-center justify-center w-7 h-7 rounded bg-muted text-muted-foreground border border-border hover:bg-accent hover:text-accent-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 cursor-pointer"
+                        title="Move down"
+                      >
+                        <ArrowDown className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </td>
+
+                  {isAdmin && (
+                    <td className="px-4 py-2.5 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirm(product.name)}
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 hover:border-red-400 transition-all duration-150 cursor-pointer"
+                        title={`Delete ${product.name}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
             {showAddRow && isAdmin && (
               <tr className="border-b border-border bg-muted/10">
                 <td colSpan={colSpan} className="px-4 py-2.5">
@@ -466,6 +756,7 @@ function PlantBardana({ plantKey }: { plantKey: string }) {
 export default function BardanaTab() {
   const [activePlant, setActivePlant] = useState("ls-pulses");
   const { getAllProducts } = useBardanaStore();
+  const { computeCurrentStock } = useBardanaCalculations();
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<ShareCategories>(
     {
@@ -490,7 +781,6 @@ export default function BardanaTab() {
     selectedCategories.lsPulses &&
     selectedCategories.lsFoods &&
     selectedCategories.consolidated;
-
   const noneSelected =
     !selectedCategories.lsPulses &&
     !selectedCategories.lsFoods &&
@@ -503,7 +793,6 @@ export default function BardanaTab() {
       consolidated: checked,
     });
   };
-
   const handleCategoryToggle = (
     key: keyof ShareCategories,
     checked: boolean,
@@ -516,14 +805,22 @@ export default function BardanaTab() {
     const pad = (n: number) => String(n).padStart(2, "0");
     const dateStr = `${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 
-    const pulseProducts = sortProducts(
-      getAllProducts("LS Pulses"),
-      BARDANA_PRODUCTS,
-    ).filter((p) => p.quantity > 0);
-    const foodsProducts = sortProducts(
-      getAllProducts("LS Foods LLP"),
-      BARDANA_PRODUCTS,
-    ).filter((p) => p.quantity > 0);
+    const pulseRaw = getAllProducts("LS Pulses");
+    const foodsRaw = getAllProducts("LS Foods LLP");
+
+    const pulseProducts = sortProducts(pulseRaw, BARDANA_PRODUCTS)
+      .map((p) => ({
+        name: p.name,
+        quantity: computeCurrentStock("LS Pulses", p.name, p.quantity),
+      }))
+      .filter((p) => p.quantity > 0);
+
+    const foodsProducts = sortProducts(foodsRaw, BARDANA_PRODUCTS)
+      .map((p) => ({
+        name: p.name,
+        quantity: computeCurrentStock("LS Foods LLP", p.name, p.quantity),
+      }))
+      .filter((p) => p.quantity > 0);
 
     const nameSet = new Set<string>();
     for (const p of pulseProducts) nameSet.add(p.name);
@@ -552,18 +849,13 @@ export default function BardanaTab() {
       `\uD83D\uDCC5 ${dateStr}`,
       "",
     ];
-
     const addedSections: string[] = [];
-    if (selectedCategories.lsPulses) {
+    if (selectedCategories.lsPulses)
       addedSections.push(formatSection("LS Pulses", pulseProducts));
-    }
-    if (selectedCategories.lsFoods) {
+    if (selectedCategories.lsFoods)
       addedSections.push(formatSection("LS Foods LLP", foodsProducts));
-    }
-    if (selectedCategories.consolidated) {
+    if (selectedCategories.consolidated)
       addedSections.push(formatSection("Consolidated", consolidated));
-    }
-
     sections.push(addedSections.join("\n\n"));
 
     const report = sections.join("\n");
@@ -650,112 +942,85 @@ export default function BardanaTab() {
               Select Categories to Share
             </DialogTitle>
           </DialogHeader>
-
           <div className="py-2 space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Choose which sections to include in the report:
-            </p>
-
-            {/* All */}
-            <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30 hover:bg-muted/50 transition-colors">
+            <div className="flex items-center space-x-2 border-b border-border pb-3">
               <Checkbox
-                id="bardana-cat-all"
-                data-ocid="bardana.checkbox"
+                id="all-categories"
                 checked={allSelected}
-                onCheckedChange={(checked) => handleAllToggle(!!checked)}
+                onCheckedChange={(checked) => handleAllToggle(checked === true)}
+                className="data-[state=checked]:bg-blue-600"
               />
               <Label
-                htmlFor="bardana-cat-all"
-                className="font-semibold text-sm cursor-pointer select-none"
+                htmlFor="all-categories"
+                className="font-semibold cursor-pointer"
               >
                 All Categories
               </Label>
             </div>
-
-            <div className="pl-2 space-y-2">
-              {/* LS Pulses */}
-              <div className="flex items-center gap-3 p-2.5 rounded-md border border-green-200 bg-green-50/50 hover:bg-green-50 transition-colors">
-                <Checkbox
-                  id="bardana-cat-ls-pulses"
-                  data-ocid="bardana.checkbox"
-                  checked={selectedCategories.lsPulses}
-                  onCheckedChange={(checked) =>
-                    handleCategoryToggle("lsPulses", !!checked)
-                  }
-                />
-                <Label
-                  htmlFor="bardana-cat-ls-pulses"
-                  className="text-sm cursor-pointer select-none text-green-800 font-medium"
-                >
-                  LS Pulses
-                </Label>
-              </div>
-
-              {/* LS Foods LLP */}
-              <div className="flex items-center gap-3 p-2.5 rounded-md border border-orange-200 bg-orange-50/50 hover:bg-orange-50 transition-colors">
-                <Checkbox
-                  id="bardana-cat-ls-foods"
-                  data-ocid="bardana.checkbox"
-                  checked={selectedCategories.lsFoods}
-                  onCheckedChange={(checked) =>
-                    handleCategoryToggle("lsFoods", !!checked)
-                  }
-                />
-                <Label
-                  htmlFor="bardana-cat-ls-foods"
-                  className="text-sm cursor-pointer select-none text-orange-800 font-medium"
-                >
-                  LS Foods LLP
-                </Label>
-              </div>
-
-              {/* Consolidated */}
-              <div className="flex items-center gap-3 p-2.5 rounded-md border border-purple-200 bg-purple-50/50 hover:bg-purple-50 transition-colors">
-                <Checkbox
-                  id="bardana-cat-consolidated"
-                  data-ocid="bardana.checkbox"
-                  checked={selectedCategories.consolidated}
-                  onCheckedChange={(checked) =>
-                    handleCategoryToggle("consolidated", !!checked)
-                  }
-                />
-                <Label
-                  htmlFor="bardana-cat-consolidated"
-                  className="text-sm cursor-pointer select-none text-purple-800 font-medium"
-                >
-                  Consolidated
-                </Label>
-              </div>
-            </div>
-
-            {noneSelected && (
-              <p
-                className="text-xs text-red-500 font-medium"
-                data-ocid="bardana.error_state"
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="ls-pulses"
+                checked={selectedCategories.lsPulses}
+                onCheckedChange={(checked) =>
+                  handleCategoryToggle("lsPulses", checked === true)
+                }
+                className="data-[state=checked]:bg-green-600"
+              />
+              <Label
+                htmlFor="ls-pulses"
+                className="cursor-pointer text-green-800"
               >
-                Please select at least one category.
-              </p>
-            )}
+                LS Pulses
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="ls-foods"
+                checked={selectedCategories.lsFoods}
+                onCheckedChange={(checked) =>
+                  handleCategoryToggle("lsFoods", checked === true)
+                }
+                className="data-[state=checked]:bg-orange-500"
+              />
+              <Label
+                htmlFor="ls-foods"
+                className="cursor-pointer text-orange-800"
+              >
+                LS Foods LLP
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="consolidated"
+                checked={selectedCategories.consolidated}
+                onCheckedChange={(checked) =>
+                  handleCategoryToggle("consolidated", checked === true)
+                }
+                className="data-[state=checked]:bg-purple-600"
+              />
+              <Label
+                htmlFor="consolidated"
+                className="cursor-pointer text-purple-800"
+              >
+                Consolidated
+              </Label>
+            </div>
           </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter>
             <Button
               variant="outline"
-              size="sm"
-              data-ocid="bardana.cancel_button"
               onClick={() => setShowShareDialog(false)}
+              className="text-xs"
             >
               Cancel
             </Button>
             <Button
-              size="sm"
-              data-ocid="bardana.primary_button"
-              className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5"
-              disabled={noneSelected}
               onClick={handleShareConfirm}
+              disabled={noneSelected}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-xs gap-1.5"
             >
               <Share2 className="w-3.5 h-3.5" />
-              Share on WhatsApp
+              Share to WhatsApp
             </Button>
           </DialogFooter>
         </DialogContent>

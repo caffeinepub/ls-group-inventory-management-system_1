@@ -9,13 +9,17 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/contexts/AuthContext";
 import { useActor } from "@/hooks/useActor";
+import { useChangeLog } from "@/hooks/useChangeLog";
+import {
+  addToBardanaAccumulatedInventory,
+  inventoryToBardanaProduct,
+} from "@/hooks/useInventoryStore";
 import { useTransactionLog } from "@/hooks/useTransactionLog";
 import { AlertTriangle, ShoppingBag } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
-const CURRENT_USER = "admin";
 
 interface InventoryStockDialogProps {
   open: boolean;
@@ -36,6 +40,8 @@ export default function InventoryStockDialog({
 }: InventoryStockDialogProps) {
   const { actor } = useActor();
   const { logTransaction } = useTransactionLog();
+  const { logInventoryChange } = useChangeLog();
+  const { currentUser } = useAuth();
   const [addValue, setAddValue] = useState("");
   const [subtractValue, setSubtractValue] = useState("");
 
@@ -69,22 +75,32 @@ export default function InventoryStockDialog({
       return;
     }
 
+    const userId = currentUser?.username ?? "unknown";
+
     // Save quantity
     onSave(productName, resultant);
     toast.success(`Stock updated: ${productName} → ${resultant}`);
 
-    // Log transactions to dedicated daily log
-    if (safeAdd > 0) logTransaction(plantKey, productName, "add", safeAdd);
+    // Log to dedicated daily transaction log (for report Today's filling/selling)
+    if (safeAdd > 0) {
+      logTransaction(plantKey, productName, "add", safeAdd);
+      const bardanaProd = inventoryToBardanaProduct(productName);
+      if (bardanaProd)
+        addToBardanaAccumulatedInventory(plantKey, bardanaProd, safeAdd);
+    }
     if (safeSubtract > 0)
       logTransaction(plantKey, productName, "subtract", safeSubtract);
+
+    // Log to change log
+    if (safeAdd > 0) logInventoryChange(plantKey, productName, safeAdd, userId);
+    if (safeSubtract > 0)
+      logInventoryChange(plantKey, productName, -safeSubtract, userId);
 
     resetFields();
 
     // Fire-and-forget backend change log
     if (actor) {
-      actor
-        .setStock(plantKey, productName, resultant, CURRENT_USER)
-        .catch(() => {});
+      actor.setStock(plantKey, productName, resultant, userId).catch(() => {});
     }
   };
 
@@ -166,13 +182,19 @@ export default function InventoryStockDialog({
         </div>
 
         <div
-          className={`flex items-center justify-between rounded-lg border px-4 py-3 transition-colors ${isNegativeResult ? "bg-destructive/10 border-destructive/40" : "bg-accent/10 border-accent/30"}`}
+          className={`flex items-center justify-between rounded-lg border px-4 py-3 transition-colors ${
+            isNegativeResult
+              ? "bg-destructive/10 border-destructive/40"
+              : "bg-accent/10 border-accent/30"
+          }`}
         >
           <span className="text-sm font-medium text-muted-foreground">
             Resultant Stock
           </span>
           <span
-            className={`text-2xl font-bold tabular-nums ${isNegativeResult ? "text-destructive" : "text-accent"}`}
+            className={`text-2xl font-bold tabular-nums ${
+              isNegativeResult ? "text-destructive" : "text-accent"
+            }`}
           >
             {resultant}
           </span>
