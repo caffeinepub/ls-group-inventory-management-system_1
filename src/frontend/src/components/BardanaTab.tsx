@@ -23,7 +23,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
-import { useActor } from "@/hooks/useActor";
 import { useChangeLog } from "@/hooks/useChangeLog";
 import {
   BARDANA_PRODUCTS,
@@ -201,7 +200,6 @@ function PlantBardana({ plantKey }: { plantKey: string }) {
     setStockInWH,
   } = useBardanaCalculations();
   const { currentUser } = useAuth();
-  const { actor } = useActor();
   const { logBardanaChange } = useChangeLog();
   const [editingProduct, setEditingProduct] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>("");
@@ -265,10 +263,6 @@ function PlantBardana({ plantKey }: { plantKey: string }) {
 
     setEditingProduct(null);
     setEditValue("");
-
-    if (actor) {
-      actor.setBardanaStock(plantKey, productName, qty).catch(() => {});
-    }
   };
 
   // ── Stock in WH editing ──────────────────────────────────────────────────

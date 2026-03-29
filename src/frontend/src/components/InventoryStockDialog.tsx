@@ -10,7 +10,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
-import { useActor } from "@/hooks/useActor";
 import { useChangeLog } from "@/hooks/useChangeLog";
 import {
   inventoryToBardanaProduct,
@@ -38,7 +37,6 @@ export default function InventoryStockDialog({
   plantKey,
   onSave,
 }: InventoryStockDialogProps) {
-  const { actor } = useActor();
   const { logTransaction } = useTransactionLog();
   const { logInventoryChange } = useChangeLog();
   const { currentUser } = useAuth();
@@ -100,11 +98,6 @@ export default function InventoryStockDialog({
       logInventoryChange(plantKey, productName, -safeSubtract, userId);
 
     resetFields();
-
-    // Fire-and-forget backend change log (legacy actor call)
-    if (actor) {
-      actor.setStock(plantKey, productName, resultant, userId).catch(() => {});
-    }
   };
 
   return (

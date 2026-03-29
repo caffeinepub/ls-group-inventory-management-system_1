@@ -14,7 +14,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
-import { useActor } from "@/hooks/useActor";
 import {
   PLANTS,
   RAW_MATERIAL_PRODUCTS,
@@ -120,7 +119,6 @@ function PlantRawMaterials({ plantKey }: { plantKey: string }) {
     reorderProduct,
   } = useRawMaterialsStore();
   const { currentUser } = useAuth();
-  const { actor } = useActor();
   const [editingProduct, setEditingProduct] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>("");
   const [showAddRow, setShowAddRow] = useState(false);
@@ -153,10 +151,6 @@ function PlantRawMaterials({ plantKey }: { plantKey: string }) {
     toast.success(`Updated ${productName} to ${qty}`);
     setEditingProduct(null);
     setEditValue("");
-
-    if (actor) {
-      actor.setRawMaterialStock(plantKey, productName, qty).catch(() => {});
-    }
   };
 
   const handleShowAddRow = () => {
