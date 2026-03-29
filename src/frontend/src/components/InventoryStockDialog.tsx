@@ -13,8 +13,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useActor } from "@/hooks/useActor";
 import { useChangeLog } from "@/hooks/useChangeLog";
 import {
-  addToBardanaAccumulatedInventory,
   inventoryToBardanaProduct,
+  useBardanaCalculations,
 } from "@/hooks/useInventoryStore";
 import { useTransactionLog } from "@/hooks/useTransactionLog";
 import { AlertTriangle, ShoppingBag } from "lucide-react";
@@ -42,6 +42,7 @@ export default function InventoryStockDialog({
   const { logTransaction } = useTransactionLog();
   const { logInventoryChange } = useChangeLog();
   const { currentUser } = useAuth();
+  const { addToAccumulatedInventory } = useBardanaCalculations();
   const [addValue, setAddValue] = useState("");
   const [subtractValue, setSubtractValue] = useState("");
 
@@ -84,9 +85,11 @@ export default function InventoryStockDialog({
     // Log to dedicated daily transaction log (for report Today's filling/selling)
     if (safeAdd > 0) {
       logTransaction(plantKey, productName, "add", safeAdd);
+      // Update bardana accumulated inventory via hook
       const bardanaProd = inventoryToBardanaProduct(productName);
-      if (bardanaProd)
-        addToBardanaAccumulatedInventory(plantKey, bardanaProd, safeAdd);
+      if (bardanaProd) {
+        addToAccumulatedInventory(plantKey, bardanaProd, safeAdd);
+      }
     }
     if (safeSubtract > 0)
       logTransaction(plantKey, productName, "subtract", safeSubtract);
@@ -98,7 +101,7 @@ export default function InventoryStockDialog({
 
     resetFields();
 
-    // Fire-and-forget backend change log
+    // Fire-and-forget backend change log (legacy actor call)
     if (actor) {
       actor.setStock(plantKey, productName, resultant, userId).catch(() => {});
     }

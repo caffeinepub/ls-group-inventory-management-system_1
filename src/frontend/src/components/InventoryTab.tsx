@@ -30,7 +30,7 @@ import {
   sortProducts,
   useInventoryStore,
 } from "@/hooks/useInventoryStore";
-import { getTodaySummary } from "@/hooks/useTransactionLog";
+import { useTransactionLog } from "@/hooks/useTransactionLog";
 import { Factory, Plus, Share2, ShoppingBag, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
@@ -344,6 +344,7 @@ function PlantInventory({ plantKey }: { plantKey: string }) {
 export default function InventoryTab() {
   const [activePlant, setActivePlant] = useState("ls-pulses");
   const { getAllProducts } = useInventoryStore();
+  const { getTodaySummary } = useTransactionLog();
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<ShareCategories>(
     {

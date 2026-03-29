@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import { LayoutGrid, LogOut, Package2, Users } from "lucide-react";
+import { DataStoreProvider, useDataStore } from "@/contexts/DataStoreContext";
+import { LayoutGrid, Loader2, LogOut, Package2, Users } from "lucide-react";
 import { useState } from "react";
 
 function MainApp() {
@@ -157,15 +158,39 @@ function MainApp() {
   );
 }
 
-export default function App() {
+function LoadingScreen() {
   return (
-    <AuthProvider>
-      <AppGate />
-    </AuthProvider>
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex flex-col items-center gap-4 text-center">
+        <div className="flex items-center justify-center w-16 h-16 rounded-xl bg-accent/20 border border-accent/40">
+          <Package2 className="w-8 h-8 text-accent" />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-foreground mb-1">
+            LS Group Inventory
+          </h2>
+          <p className="text-sm text-muted-foreground">Loading shared data…</p>
+        </div>
+        <Loader2 className="w-6 h-6 animate-spin text-accent" />
+      </div>
+    </div>
   );
 }
 
 function AppGate() {
+  const { isLoading } = useDataStore();
   const { currentUser } = useAuth();
+
+  if (isLoading) return <LoadingScreen />;
   return currentUser ? <MainApp /> : <LoginPage />;
+}
+
+export default function App() {
+  return (
+    <DataStoreProvider>
+      <AuthProvider>
+        <AppGate />
+      </AuthProvider>
+    </DataStoreProvider>
+  );
 }

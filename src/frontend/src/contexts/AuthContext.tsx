@@ -1,13 +1,12 @@
+import {
+  DEFAULT_USERS,
+  type User,
+  type UserRole,
+  useDataStore,
+} from "@/contexts/DataStoreContext";
 import { createContext, useContext, useEffect, useState } from "react";
 
-export type UserRole = "admin" | "staff";
-
-export interface User {
-  username: string;
-  password: string;
-  role: UserRole;
-  blocked?: boolean;
-}
+export type { User, UserRole };
 
 interface AuthContextValue {
   currentUser: User | null;
@@ -27,39 +26,55 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const DEFAULT_USERS: User[] = [
-  { username: "akshay", password: "lsgroup", role: "admin" },
-  { username: "harshul", password: "lsgroup", role: "admin" },
-  { username: "ashok", password: "lsgroup", role: "admin" },
-  { username: "chandan", password: "lsgroup", role: "admin" },
-  { username: "ashish", password: "lsgroup", role: "admin" },
-];
-
-const USERS_KEY = "ls_users";
 const CURRENT_USER_KEY = "ls_current_user";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [users, setUsers] = useState<User[]>(() => {
-    const stored = localStorage.getItem(USERS_KEY);
-    if (stored) return JSON.parse(stored);
-    localStorage.setItem(USERS_KEY, JSON.stringify(DEFAULT_USERS));
-    return DEFAULT_USERS;
-  });
+  const { users, updateUsers } = useDataStore();
 
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const stored = localStorage.getItem(CURRENT_USER_KEY);
-    return stored ? JSON.parse(stored) : null;
+    // Session (current user) is still stored locally for persistence across refreshes
+    try {
+      const stored = localStorage.getItem(CURRENT_USER_KEY);
+      return stored ? (JSON.parse(stored) as User) : null;
+    } catch {
+      return null;
+    }
   });
 
+  // When users list updates from backend (e.g., another admin blocked this user),
+  // re-validate the current session
   useEffect(() => {
-    localStorage.setItem(USERS_KEY, JSON.stringify(users));
-  }, [users]);
+    if (!currentUser) return;
+    const freshUser = users.find((u) => u.username === currentUser.username);
+    if (!freshUser) {
+      // User was deleted
+      setCurrentUser(null);
+      localStorage.removeItem(CURRENT_USER_KEY);
+      return;
+    }
+    if (freshUser.blocked) {
+      // User was blocked
+      setCurrentUser(null);
+      localStorage.removeItem(CURRENT_USER_KEY);
+      return;
+    }
+    // Update local session with fresh data (e.g., password change)
+    if (
+      freshUser.password !== currentUser.password ||
+      freshUser.role !== currentUser.role
+    ) {
+      setCurrentUser(freshUser);
+      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(freshUser));
+    }
+  }, [users, currentUser]);
 
   const login = (
     username: string,
     password: string,
   ): "ok" | "blocked" | "invalid" => {
-    const user = users.find(
+    // Use DEFAULT_USERS as fallback if users list is somehow empty
+    const userList = users.length > 0 ? users : DEFAULT_USERS;
+    const user = userList.find(
       (u) => u.username === username.toLowerCase() && u.password === password,
     );
     if (!user) return "invalid";
@@ -82,23 +97,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const normalized = username.toLowerCase().trim();
     if (users.find((u) => u.username === normalized)) return false;
     const newUser: User = { username: normalized, password, role };
-    setUsers((prev) => [...prev, newUser]);
+    updateUsers([...users, newUser]);
     return true;
   };
 
   const deleteUser = (username: string) => {
-    setUsers((prev) => prev.filter((u) => u.username !== username));
+    updateUsers(users.filter((u) => u.username !== username));
   };
 
   const blockUser = (username: string) => {
-    setUsers((prev) =>
-      prev.map((u) => (u.username === username ? { ...u, blocked: true } : u)),
+    updateUsers(
+      users.map((u) => (u.username === username ? { ...u, blocked: true } : u)),
     );
   };
 
   const unblockUser = (username: string) => {
-    setUsers((prev) =>
-      prev.map((u) => (u.username === username ? { ...u, blocked: false } : u)),
+    updateUsers(
+      users.map((u) =>
+        u.username === username ? { ...u, blocked: false } : u,
+      ),
     );
   };
 
@@ -108,20 +125,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     newPassword: string,
   ): boolean => {
     const normalizedNew = newUsername.toLowerCase().trim();
-    // Check if newUsername is taken by another user
     if (
       normalizedNew !== username &&
       users.find((u) => u.username === normalizedNew)
     )
       return false;
-    setUsers((prev) =>
-      prev.map((u) =>
-        u.username === username
-          ? { ...u, username: normalizedNew, password: newPassword }
-          : u,
-      ),
+    const updatedUsers = users.map((u) =>
+      u.username === username
+        ? { ...u, username: normalizedNew, password: newPassword }
+        : u,
     );
-    // If the changed user is the current logged-in user, update session
+    updateUsers(updatedUsers);
+    // Update session if the changed user is currently logged in
     if (currentUser?.username === username) {
       const updated = {
         ...currentUser,
