@@ -26,7 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { type User, type UserRole, useAuth } from "@/contexts/AuthContext";
-import { Ban, KeyRound, Trash2, UserPlus } from "lucide-react";
+import { Ban, KeyRound, Lock, Trash2, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -50,6 +50,12 @@ export default function UserManagementTab() {
   const [editUsername, setEditUsername] = useState("");
   const [editPassword, setEditPassword] = useState("");
   const [editError, setEditError] = useState("");
+
+  // Change password only dialog state
+  const [pwUser, setPwUser] = useState<User | null>(null);
+  const [pwNew, setPwNew] = useState("");
+  const [pwConfirm, setPwConfirm] = useState("");
+  const [pwError, setPwError] = useState("");
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,6 +119,34 @@ export default function UserManagementTab() {
       `Credentials updated for "${editUsername.trim().toLowerCase()}".`,
     );
     setEditUser(null);
+  };
+
+  const openPasswordDialog = (user: User) => {
+    setPwUser(user);
+    setPwNew("");
+    setPwConfirm("");
+    setPwError("");
+  };
+
+  const handleChangePassword = () => {
+    if (!pwUser) return;
+    setPwError("");
+    if (!pwNew.trim()) {
+      setPwError("New password cannot be empty.");
+      return;
+    }
+    if (pwNew !== pwConfirm) {
+      setPwError("Passwords do not match.");
+      return;
+    }
+    // Keep same username, only change password
+    const ok = changeCredentials(pwUser.username, pwUser.username, pwNew);
+    if (!ok) {
+      setPwError("Failed to update password. Please try again.");
+      return;
+    }
+    toast.success(`Password updated for "${pwUser.username}".`);
+    setPwUser(null);
   };
 
   return (
@@ -236,12 +270,23 @@ export default function UserManagementTab() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      {/* Change Credentials */}
+                      {/* Change Password */}
                       <Button
                         data-ocid={`usermgmt.edit_button.${idx + 1}`}
                         variant="ghost"
                         size="sm"
-                        title="Change credentials"
+                        title="Change password"
+                        onClick={() => openPasswordDialog(user)}
+                        className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                      >
+                        <Lock className="w-4 h-4" />
+                      </Button>
+                      {/* Change Credentials (username + password) */}
+                      <Button
+                        data-ocid={`usermgmt.secondary_button.${idx + 1}`}
+                        variant="ghost"
+                        size="sm"
+                        title="Change credentials (username & password)"
                         onClick={() => openEditDialog(user)}
                         className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                       >
@@ -249,7 +294,7 @@ export default function UserManagementTab() {
                       </Button>
                       {/* Block / Unblock */}
                       <Button
-                        data-ocid={`usermgmt.block_button.${idx + 1}`}
+                        data-ocid={`usermgmt.toggle.${idx + 1}`}
                         variant="ghost"
                         size="sm"
                         title={user.blocked ? "Unblock user" : "Block user"}
@@ -284,6 +329,70 @@ export default function UserManagementTab() {
         </CardContent>
       </Card>
 
+      {/* Change Password Dialog */}
+      <Dialog
+        open={!!pwUser}
+        onOpenChange={(open) => {
+          if (!open) setPwUser(null);
+        }}
+      >
+        <DialogContent data-ocid="usermgmt.dialog">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="w-4 h-4" />
+              Change Password — {pwUser?.username}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1">
+              <Label htmlFor="pw-new">New Password</Label>
+              <Input
+                id="pw-new"
+                data-ocid="usermgmt.input"
+                type="password"
+                value={pwNew}
+                onChange={(e) => setPwNew(e.target.value)}
+                placeholder="Enter new password"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="pw-confirm">Confirm Password</Label>
+              <Input
+                id="pw-confirm"
+                data-ocid="usermgmt.input"
+                type="password"
+                value={pwConfirm}
+                onChange={(e) => setPwConfirm(e.target.value)}
+                placeholder="Confirm new password"
+              />
+            </div>
+            {pwError && (
+              <p
+                data-ocid="usermgmt.error_state"
+                className="text-sm text-destructive"
+              >
+                {pwError}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              data-ocid="usermgmt.cancel_button"
+              variant="outline"
+              onClick={() => setPwUser(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              data-ocid="usermgmt.save_button"
+              onClick={handleChangePassword}
+            >
+              Save Password
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Change Credentials Dialog */}
       <Dialog
         open={!!editUser}
@@ -291,7 +400,7 @@ export default function UserManagementTab() {
           if (!open) setEditUser(null);
         }}
       >
-        <DialogContent>
+        <DialogContent data-ocid="usermgmt.dialog">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <KeyRound className="w-4 h-4" />
@@ -303,6 +412,7 @@ export default function UserManagementTab() {
               <Label htmlFor="edit-username">New Username</Label>
               <Input
                 id="edit-username"
+                data-ocid="usermgmt.input"
                 value={editUsername}
                 onChange={(e) => setEditUsername(e.target.value)}
                 placeholder="Enter new username"
@@ -312,6 +422,7 @@ export default function UserManagementTab() {
               <Label htmlFor="edit-password">New Password</Label>
               <Input
                 id="edit-password"
+                data-ocid="usermgmt.input"
                 type="password"
                 value={editPassword}
                 onChange={(e) => setEditPassword(e.target.value)}
@@ -319,14 +430,28 @@ export default function UserManagementTab() {
               />
             </div>
             {editError && (
-              <p className="text-sm text-destructive">{editError}</p>
+              <p
+                data-ocid="usermgmt.error_state"
+                className="text-sm text-destructive"
+              >
+                {editError}
+              </p>
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditUser(null)}>
+            <Button
+              data-ocid="usermgmt.cancel_button"
+              variant="outline"
+              onClick={() => setEditUser(null)}
+            >
               Cancel
             </Button>
-            <Button onClick={handleChangeCredentials}>Save Changes</Button>
+            <Button
+              data-ocid="usermgmt.save_button"
+              onClick={handleChangeCredentials}
+            >
+              Save Changes
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

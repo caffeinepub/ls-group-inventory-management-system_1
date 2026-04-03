@@ -21,7 +21,18 @@ import {
 // ─── Backend interface ──────────────────────────────────────────────────────────────
 interface JsonBackend {
   getAllData(): Promise<
-    [string, string, string, string, string, string, string, string, string]
+    [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+    ]
   >;
   getInventory(): Promise<string>;
   setInventory(data: string): Promise<void>;
@@ -41,6 +52,8 @@ interface JsonBackend {
   setTransactionLog(data: string): Promise<void>;
   getUsers(): Promise<string>;
   setUsers(data: string): Promise<void>;
+  getOrderLists(): Promise<string>;
+  setOrderLists(data: string): Promise<void>;
 }
 
 // ─── Types ─────────────────────────────────────────────────────────────────────────────
@@ -99,6 +112,7 @@ export interface OrderRecord {
   remarks: string;
   deliveries: DeliveryRecord[];
   createdAt: number;
+  category?: "Dal" | "Cattle Feed";
 }
 
 export interface ToolRecord {
@@ -139,6 +153,13 @@ export interface TransactionEntry {
   timestamp: number;
 }
 
+export interface OrderListsData {
+  customBrands: string[];
+  customBrokers: string[];
+  deletedBrands: string[];
+  deletedBrokers: string[];
+}
+
 export type InventoryData = Record<string, PlantData>;
 
 // ─── Defaults ──────────────────────────────────────────────────────────────────────────
@@ -153,6 +174,13 @@ export const DEFAULT_USERS: User[] = [
 
 const EMPTY_BARDANA_STORE: BardanaStoreData = { entries: {}, plantMeta: {} };
 
+const DEFAULT_ORDER_LISTS: OrderListsData = {
+  customBrands: [],
+  customBrokers: [],
+  deletedBrands: [],
+  deletedBrokers: [],
+};
+
 // Field indices matching the getAllData() tuple order
 const FIELD_INVENTORY = 0;
 const FIELD_BARDANA = 1;
@@ -163,6 +191,7 @@ const FIELD_CHANGELOG_INVENTORY = 5;
 const FIELD_CHANGELOG_BARDANA = 6;
 const FIELD_TRANSACTION_LOG = 7;
 const FIELD_USERS = 8;
+const FIELD_ORDER_LISTS = 9;
 
 // ─── Backend singleton (lazy) ──────────────────────────────────────────────────────────
 
@@ -192,6 +221,7 @@ interface DataStoreValue {
   changeLogBardana: BardanaLogEntry[];
   transactionLog: TransactionEntry[];
   users: User[];
+  orderListsData: OrderListsData;
   updateInventoryData: (data: InventoryData) => void;
   updateBardanaData: (data: BardanaStoreData) => void;
   updateRawMaterialsData: (data: InventoryData) => void;
@@ -201,6 +231,7 @@ interface DataStoreValue {
   updateChangeLogBardana: (data: BardanaLogEntry[]) => void;
   updateTransactionLog: (data: TransactionEntry[]) => void;
   updateUsers: (data: User[]) => void;
+  updateOrderListsData: (data: OrderListsData) => void;
 }
 
 const DataStoreContext = createContext<DataStoreValue | null>(null);
@@ -232,6 +263,25 @@ function normalizeBardanaStore(raw: unknown): BardanaStoreData {
   };
 }
 
+function normalizeOrderLists(raw: unknown): OrderListsData {
+  if (!raw || typeof raw !== "object") return DEFAULT_ORDER_LISTS;
+  const r = raw as Record<string, unknown>;
+  return {
+    customBrands: Array.isArray(r.customBrands)
+      ? (r.customBrands as string[])
+      : [],
+    customBrokers: Array.isArray(r.customBrokers)
+      ? (r.customBrokers as string[])
+      : [],
+    deletedBrands: Array.isArray(r.deletedBrands)
+      ? (r.deletedBrands as string[])
+      : [],
+    deletedBrokers: Array.isArray(r.deletedBrokers)
+      ? (r.deletedBrokers as string[])
+      : [],
+  };
+}
+
 // ─── Provider ─────────────────────────────────────────────────────────────────────────────
 
 export function DataStoreProvider({ children }: { children: React.ReactNode }) {
@@ -250,13 +300,15 @@ export function DataStoreProvider({ children }: { children: React.ReactNode }) {
   );
   const [transactionLog, setTransactionLog] = useState<TransactionEntry[]>([]);
   const [users, setUsers] = useState<User[]>(DEFAULT_USERS);
+  const [orderListsData, setOrderListsData] =
+    useState<OrderListsData>(DEFAULT_ORDER_LISTS);
 
   // Last known JSON from the backend (for change detection)
-  const lastJsonRef = useRef<string[]>(Array(9).fill(""));
+  const lastJsonRef = useRef<string[]>(Array(10).fill(""));
 
   // Pending writes counter per field — prevents polling from overwriting
   // optimistic updates while a backend write is still in flight.
-  const pendingWritesRef = useRef<number[]>(Array(9).fill(0));
+  const pendingWritesRef = useRef<number[]>(Array(10).fill(0));
 
   const applyAllData = useCallback(
     (
@@ -270,9 +322,21 @@ export function DataStoreProvider({ children }: { children: React.ReactNode }) {
         string,
         string,
         string,
+        string,
       ],
     ) => {
-      const [inv, bard, orders, tools, raw, clInv, clBard, txn, usr] = data;
+      const [
+        inv,
+        bard,
+        orders,
+        tools,
+        raw,
+        clInv,
+        clBard,
+        txn,
+        usr,
+        orderLists,
+      ] = data;
 
       setInventoryData(parseOrDefault<InventoryData>(inv, {}));
       setBardanaData(normalizeBardanaStore(parseOrDefault<unknown>(bard, {})));
@@ -285,6 +349,10 @@ export function DataStoreProvider({ children }: { children: React.ReactNode }) {
 
       const parsedUsers = parseOrDefault<User[]>(usr, []);
       setUsers(parsedUsers.length > 0 ? parsedUsers : DEFAULT_USERS);
+
+      setOrderListsData(
+        normalizeOrderLists(parseOrDefault<unknown>(orderLists, {})),
+      );
     },
     [],
   );
@@ -294,8 +362,24 @@ export function DataStoreProvider({ children }: { children: React.ReactNode }) {
     getActor()
       .then((actor) => actor.getAllData())
       .then((data) => {
-        lastJsonRef.current = [...data];
-        applyAllData(data);
+        // Backend may return 9-tuple (old) or 10-tuple (new); pad if needed
+        const padded = [...data] as string[];
+        while (padded.length < 10) padded.push("");
+        lastJsonRef.current = padded;
+        applyAllData(
+          padded as [
+            string,
+            string,
+            string,
+            string,
+            string,
+            string,
+            string,
+            string,
+            string,
+            string,
+          ],
+        );
         setIsLoading(false);
       })
       .catch(() => {
@@ -304,14 +388,26 @@ export function DataStoreProvider({ children }: { children: React.ReactNode }) {
   }, [applyAllData]);
 
   // Poll every 10 seconds for updates from other users/devices.
-  // Fields with pending writes are skipped to avoid reverting optimistic updates.
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
         const actor = await getActor();
-        const data = await actor.getAllData();
+        const rawData = await actor.getAllData();
+        const dataArr = [...rawData] as string[];
+        while (dataArr.length < 10) dataArr.push("");
+        const data = dataArr as [
+          string,
+          string,
+          string,
+          string,
+          string,
+          string,
+          string,
+          string,
+          string,
+          string,
+        ];
 
-        // Build merged data: skip fields with pending writes (keep local value)
         const merged = data.map((json, i) =>
           pendingWritesRef.current[i] > 0 ? lastJsonRef.current[i] : json,
         ) as typeof data;
@@ -329,16 +425,6 @@ export function DataStoreProvider({ children }: { children: React.ReactNode }) {
     }, 10000);
     return () => clearInterval(interval);
   }, [applyAllData]);
-
-  // ─── Updater factory ────────────────────────────────────────────────────────────
-  // Each updater:
-  // 1. Updates React state immediately (optimistic)
-  // 2. Increments pending-writes counter for this field
-  // 3. Writes to backend
-  // 4. On completion (success or error), decrements pending-writes counter
-  //
-  // While pending > 0, the polling loop skips this field so it cannot
-  // overwrite the optimistic update with stale backend data.
 
   function makeUpdater<T>(
     fieldIndex: number,
@@ -437,6 +523,16 @@ export function DataStoreProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const updateOrderListsData = useCallback(
+    makeUpdater<OrderListsData>(
+      FIELD_ORDER_LISTS,
+      setOrderListsData,
+      (a, json) => a.setOrderLists(json),
+    ),
+    [],
+  );
+
   return (
     <DataStoreContext.Provider
       value={{
@@ -450,6 +546,7 @@ export function DataStoreProvider({ children }: { children: React.ReactNode }) {
         changeLogBardana,
         transactionLog,
         users,
+        orderListsData,
         updateInventoryData,
         updateBardanaData,
         updateRawMaterialsData,
@@ -459,6 +556,7 @@ export function DataStoreProvider({ children }: { children: React.ReactNode }) {
         updateChangeLogBardana,
         updateTransactionLog,
         updateUsers,
+        updateOrderListsData,
       }}
     >
       {children}

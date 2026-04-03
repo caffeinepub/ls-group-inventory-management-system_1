@@ -16,7 +16,7 @@ import {
   useDataStore,
 } from "@/contexts/DataStoreContext";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Constants ──────────────────────────────────────────────────────────────────
 
 export const PLANTS = ["LS Pulses", "LS Foods LLP"] as const;
 export type PlantName = (typeof PLANTS)[number];
@@ -65,7 +65,7 @@ export const RAW_MATERIAL_PRODUCTS = [
   "Cement",
 ] as const;
 
-// ─── Branch Color Utility ────────────────────────────────────────────────────
+// ─── Branch Color Utility ───────────────────────────────────────────────────────
 
 export function branchTabClass(plant: string): string {
   if (plant === "LS Pulses") {
@@ -81,7 +81,7 @@ export function branchBadgeClass(plant: string): string {
   return "bg-orange-100 text-orange-800 border border-orange-400 font-semibold";
 }
 
-// ─── Sorting Utility ─────────────────────────────────────────────────────────
+// ─── Sorting Utility ────────────────────────────────────────────────────────────────
 
 export function sortProducts(
   products: Array<{ name: string; quantity: number }>,
@@ -104,7 +104,7 @@ export function sortProducts(
   return [...withStock, ...withoutStock, ...customWithoutStock];
 }
 
-// ─── Generic Plant Data Helper ───────────────────────────────────────────────
+// ─── Generic Plant Data Helper ───────────────────────────────────────────────────────────
 
 function getEmptyPlantData(): PlantData {
   return {
@@ -156,7 +156,7 @@ function buildOrderedProductList(
   return ordered;
 }
 
-// ─── Generic Plant Data Store Hook Factory ───────────────────────────────────
+// ─── Generic Plant Data Store Hook Factory ───────────────────────────────────────────
 
 function usePlantDataStore(
   data: InventoryData,
@@ -255,7 +255,7 @@ function usePlantDataStore(
   };
 }
 
-// ─── Exported Hooks ───────────────────────────────────────────────────────────
+// ─── Exported Hooks ─────────────────────────────────────────────────────────────────
 
 export function useInventoryStore() {
   const { inventoryData, updateInventoryData } = useDataStore();
@@ -418,7 +418,7 @@ export function useRawMaterialsStore() {
   );
 }
 
-// ─── Orders Store ─────────────────────────────────────────────────────────────
+// ─── Orders Store ─────────────────────────────────────────────────────────────────
 
 // Re-export types for compatibility
 export type { DeliveryRecord, OrderRecord } from "@/contexts/DataStoreContext";
@@ -547,7 +547,7 @@ export function useOrdersStore() {
   };
 }
 
-// ─── Tools & Machinery Store ─────────────────────────────────────────────────
+// ─── Tools & Machinery Store ───────────────────────────────────────────────────────────
 
 export type { ToolRecord } from "@/contexts/DataStoreContext";
 
@@ -602,8 +602,12 @@ export function useToolsStore() {
   return { getTools, addTool, updateTool, deleteTool, reorderTool };
 }
 
-// ─── Bardana Calculations Hook ────────────────────────────────────────────────
+// ─── Bardana Calculations Hook ───────────────────────────────────────────────────────────
 
+/**
+ * Maps an inventory product name to its corresponding bardana product name.
+ * Tiranga Kutta and Tiranga Jarda both map to "Tiranga" in bardana.
+ */
 export function inventoryToBardanaProduct(invProduct: string): string | null {
   const directMatches = [
     "Indica",
@@ -617,6 +621,8 @@ export function inventoryToBardanaProduct(invProduct: string): string | null {
     "Golden Tiger",
   ];
   if (directMatches.includes(invProduct)) return invProduct;
+  if (invProduct === "Tiranga Kutta" || invProduct === "Tiranga Jarda")
+    return "Tiranga";
   return null;
 }
 

@@ -7,7 +7,7 @@ import { IDL } from '@icp-sdk/core/candid';
 export const idlService = IDL.Service({
   'getAllData' : IDL.Func(
       [],
-      [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+      [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
       ['query'],
     ),
   'getInventory' : IDL.Func([], [IDL.Text], ['query']),
@@ -28,6 +28,8 @@ export const idlService = IDL.Service({
   'setTransactionLog' : IDL.Func([IDL.Text], [], []),
   'getUsers' : IDL.Func([], [IDL.Text], ['query']),
   'setUsers' : IDL.Func([IDL.Text], [], []),
+  'getOrderLists' : IDL.Func([], [IDL.Text], ['query']),
+  'setOrderLists' : IDL.Func([IDL.Text], [], []),
 });
 
 export const idlInitArgs = [];
@@ -36,7 +38,7 @@ export const idlFactory = ({ IDL }) => {
   return IDL.Service({
     'getAllData' : IDL.Func(
         [],
-        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         ['query'],
       ),
     'getInventory' : IDL.Func([], [IDL.Text], ['query']),
@@ -57,6 +59,8 @@ export const idlFactory = ({ IDL }) => {
     'setTransactionLog' : IDL.Func([IDL.Text], [], []),
     'getUsers' : IDL.Func([], [IDL.Text], ['query']),
     'setUsers' : IDL.Func([IDL.Text], [], []),
+    'getOrderLists' : IDL.Func([], [IDL.Text], ['query']),
+    'setOrderLists' : IDL.Func([IDL.Text], [], []),
   });
 };
 

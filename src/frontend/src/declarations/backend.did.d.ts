@@ -3,7 +3,7 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 
 export interface _SERVICE {
-  getAllData: ActorMethod<[], [string, string, string, string, string, string, string, string, string]>;
+  getAllData: ActorMethod<[], [string, string, string, string, string, string, string, string, string, string]>;
   getInventory: ActorMethod<[], string>;
   setInventory: ActorMethod<[string], undefined>;
   getBardana: ActorMethod<[], string>;
@@ -22,6 +22,8 @@ export interface _SERVICE {
   setTransactionLog: ActorMethod<[string], undefined>;
   getUsers: ActorMethod<[], string>;
   setUsers: ActorMethod<[string], undefined>;
+  getOrderLists: ActorMethod<[], string>;
+  setOrderLists: ActorMethod<[string], undefined>;
 }
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];

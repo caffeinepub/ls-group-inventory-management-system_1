@@ -26,5 +26,7 @@ export interface backendInterface {
     setTransactionLog(data: string): Promise<void>;
     getUsers(): Promise<string>;
     setUsers(data: string): Promise<void>;
-    getAllData(): Promise<[string, string, string, string, string, string, string, string, string]>;
+    getOrderLists(): Promise<string>;
+    setOrderLists(data: string): Promise<void>;
+    getAllData(): Promise<[string, string, string, string, string, string, string, string, string, string]>;
 }
