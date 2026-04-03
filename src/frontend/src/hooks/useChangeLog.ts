@@ -49,6 +49,34 @@ export function useChangeLog() {
     updateChangeLogInventory([entry, ...pruned]);
   };
 
+  /**
+   * Batch log multiple inventory changes in a single state update.
+   * Use this when both add and subtract happen in the same transaction
+   * to avoid the second call overwriting the first (React async state).
+   */
+  const logInventoryChangeBatch = (
+    changes: Array<{
+      plant: string;
+      product: string;
+      qtyChange: number;
+      userId: string;
+    }>,
+  ): void => {
+    const nonZero = changes.filter((c) => c.qtyChange !== 0);
+    if (nonZero.length === 0) return;
+    const pruned = prune(changeLogInventory);
+    const now = Date.now();
+    const newEntries: InventoryLogEntry[] = nonZero.map((c, i) => ({
+      id: `inv_${now + i}_${Math.random().toString(36).slice(2, 7)}`,
+      timestamp: now + i, // slight offset so entries sort correctly
+      plant: c.plant,
+      product: c.product,
+      qtyChange: c.qtyChange,
+      userId: c.userId,
+    }));
+    updateChangeLogInventory([...newEntries, ...pruned]);
+  };
+
   const logBardanaChange = (
     plant: string,
     product: string,
@@ -116,6 +144,7 @@ export function useChangeLog() {
 
   return {
     logInventoryChange,
+    logInventoryChangeBatch,
     logBardanaChange,
     logOrderChange,
     getInventoryLog,

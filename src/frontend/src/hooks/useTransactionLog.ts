@@ -51,6 +51,34 @@ export function useTransactionLog() {
     updateTransactionLog([...pruned, newEntry]);
   };
 
+  /**
+   * Batch log both add and subtract in a single state update.
+   * Use this when both occur in the same transaction to avoid the second
+   * call reading stale state and overwriting the first (React async state).
+   */
+  const logTransactionBatch = (
+    entries: Array<{
+      plant: string;
+      product: string;
+      type: "add" | "subtract";
+      quantity: number;
+    }>,
+  ): void => {
+    const valid = entries.filter((e) => e.quantity > 0);
+    if (valid.length === 0) return;
+    const pruned = pruneOldEntries(transactionLog);
+    const now = Date.now();
+    const newEntries: TransactionEntry[] = valid.map((e, i) => ({
+      id: `txn_${now + i}_${Math.random().toString(36).slice(2, 8)}`,
+      plant: e.plant,
+      product: e.product,
+      type: e.type,
+      quantity: e.quantity,
+      timestamp: now + i,
+    }));
+    updateTransactionLog([...pruned, ...newEntries]);
+  };
+
   const getTodaySummary = (
     plant: string,
     type: "add" | "subtract",
@@ -71,7 +99,7 @@ export function useTransactionLog() {
       .sort((a, b) => b.quantity - a.quantity);
   };
 
-  return { logTransaction, getTodaySummary };
+  return { logTransaction, logTransactionBatch, getTodaySummary };
 }
 
 /**

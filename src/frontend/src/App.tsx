@@ -12,7 +12,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { DataStoreProvider, useDataStore } from "@/contexts/DataStoreContext";
-import { LayoutGrid, Loader2, LogOut, Package2, Users } from "lucide-react";
+import { LayoutGrid, Loader2, LogOut, Users } from "lucide-react";
 import { useState } from "react";
 
 function MainApp() {
@@ -44,9 +44,11 @@ function MainApp() {
       {/* Header */}
       <header className="bg-header text-header-foreground shadow-md border-b border-header-border">
         <div className="max-w-screen-2xl mx-auto px-4 py-3 flex items-center gap-3">
-          <div className="flex items-center justify-center w-10 h-10 rounded bg-accent/20 border border-accent/40">
-            <Package2 className="w-6 h-6 text-accent" />
-          </div>
+          <img
+            src="/assets/img-20250827-wa0021-019d53d6-86e7-7650-9300-03ba1abbe950.jpg"
+            alt="LS Group Logo"
+            className="w-10 h-10 object-cover rounded"
+          />
           <div>
             <h1 className="text-xl font-bold tracking-wide font-display text-header-foreground leading-tight">
               LS Group Inventory Management System
@@ -162,8 +164,12 @@ function LoadingScreen() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
       <div className="flex flex-col items-center gap-4 text-center">
-        <div className="flex items-center justify-center w-16 h-16 rounded-xl bg-accent/20 border border-accent/40">
-          <Package2 className="w-8 h-8 text-accent" />
+        <div className="flex items-center justify-center w-16 h-16 rounded-xl overflow-hidden">
+          <img
+            src="/assets/img-20250827-wa0021-019d53d6-86e7-7650-9300-03ba1abbe950.jpg"
+            alt="LS Group Logo"
+            className="w-full h-full object-cover"
+          />
         </div>
         <div>
           <h2 className="text-xl font-bold text-foreground mb-1">

@@ -37,8 +37,8 @@ export default function InventoryStockDialog({
   plantKey,
   onSave,
 }: InventoryStockDialogProps) {
-  const { logTransaction } = useTransactionLog();
-  const { logInventoryChange } = useChangeLog();
+  const { logTransactionBatch } = useTransactionLog();
+  const { logInventoryChangeBatch } = useChangeLog();
   const { currentUser } = useAuth();
   const { addToAccumulatedInventory } = useBardanaCalculations();
   const [addValue, setAddValue] = useState("");
@@ -78,24 +78,62 @@ export default function InventoryStockDialog({
 
     // Save quantity
     onSave(productName, resultant);
-    toast.success(`Stock updated: ${productName} → ${resultant}`);
+    toast.success(`Stock updated: ${productName} \u2192 ${resultant}`);
 
-    // Log to dedicated daily transaction log (for report Today's filling/selling)
+    // Batch log both add and subtract in a single state update to avoid
+    // the second call reading stale state and overwriting the first entry.
+    const txnEntries: Array<{
+      plant: string;
+      product: string;
+      type: "add" | "subtract";
+      quantity: number;
+    }> = [];
+    if (safeAdd > 0)
+      txnEntries.push({
+        plant: plantKey,
+        product: productName,
+        type: "add",
+        quantity: safeAdd,
+      });
+    if (safeSubtract > 0)
+      txnEntries.push({
+        plant: plantKey,
+        product: productName,
+        type: "subtract",
+        quantity: safeSubtract,
+      });
+    if (txnEntries.length > 0) logTransactionBatch(txnEntries);
+
+    // Update bardana accumulated inventory if add > 0
     if (safeAdd > 0) {
-      logTransaction(plantKey, productName, "add", safeAdd);
-      // Update bardana accumulated inventory via hook
       const bardanaProd = inventoryToBardanaProduct(productName);
       if (bardanaProd) {
         addToAccumulatedInventory(plantKey, bardanaProd, safeAdd);
       }
     }
-    if (safeSubtract > 0)
-      logTransaction(plantKey, productName, "subtract", safeSubtract);
 
-    // Log to change log
-    if (safeAdd > 0) logInventoryChange(plantKey, productName, safeAdd, userId);
+    // Batch log both change log entries in a single state update
+    const clEntries: Array<{
+      plant: string;
+      product: string;
+      qtyChange: number;
+      userId: string;
+    }> = [];
+    if (safeAdd > 0)
+      clEntries.push({
+        plant: plantKey,
+        product: productName,
+        qtyChange: safeAdd,
+        userId,
+      });
     if (safeSubtract > 0)
-      logInventoryChange(plantKey, productName, -safeSubtract, userId);
+      clEntries.push({
+        plant: plantKey,
+        product: productName,
+        qtyChange: -safeSubtract,
+        userId,
+      });
+    if (clEntries.length > 0) logInventoryChangeBatch(clEntries);
 
     resetFields();
   };

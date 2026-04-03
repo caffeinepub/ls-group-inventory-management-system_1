@@ -31,8 +31,17 @@ import {
   useInventoryStore,
 } from "@/hooks/useInventoryStore";
 import { useTransactionLog } from "@/hooks/useTransactionLog";
-import { Factory, Plus, Share2, ShoppingBag, Trash2 } from "lucide-react";
-import { useRef, useState } from "react";
+import {
+  Factory,
+  LayoutList,
+  Plus,
+  Share2,
+  ShoppingBag,
+  Trash2,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import InventoryStockDialog from "./InventoryStockDialog";
 
@@ -341,8 +350,163 @@ function PlantInventory({ plantKey }: { plantKey: string }) {
   );
 }
 
+function FilledSoldView({
+  plant,
+  mode,
+}: { plant: string; mode: "filled" | "sold" }) {
+  const { getTodaySummary } = useTransactionLog();
+  const type = mode === "filled" ? "add" : "subtract";
+  const items = getTodaySummary(plant, type).filter((p) => p.quantity > 0);
+  const label = mode === "filled" ? "filling" : "selling";
+  const colorClass = mode === "filled" ? "text-blue-700" : "text-red-700";
+  const bgClass = mode === "filled" ? "bg-blue-50" : "bg-red-50";
+  const borderClass = mode === "filled" ? "border-blue-200" : "border-red-200";
+  const headingBg =
+    mode === "filled" ? "bg-blue-100 text-blue-800" : "bg-red-100 text-red-800";
+
+  return (
+    <div
+      className={`mx-4 mb-4 rounded-lg border ${borderClass} ${bgClass} overflow-hidden`}
+    >
+      <div
+        className={`px-4 py-2 text-xs font-bold uppercase tracking-wider ${headingBg}`}
+      >
+        Today's {mode === "filled" ? "Filling" : "Selling"} — {plant}
+      </div>
+      {items.length === 0 ? (
+        <div
+          className={`px-4 py-6 text-center text-sm ${colorClass} opacity-60`}
+        >
+          No {label} recorded today
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className={`border-b ${borderClass}`}>
+                <th
+                  className={`px-4 py-2 text-left font-semibold text-xs uppercase ${colorClass}`}
+                >
+                  Product
+                </th>
+                <th
+                  className={`px-4 py-2 text-right font-semibold text-xs uppercase ${colorClass}`}
+                >
+                  Bags
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item, idx) => (
+                <tr
+                  key={item.name}
+                  className={idx % 2 === 0 ? "bg-white/60" : ""}
+                >
+                  <td className="px-4 py-2 font-medium text-foreground">
+                    {item.name}
+                  </td>
+                  <td
+                    className={`px-4 py-2 text-right font-bold ${colorClass}`}
+                  >
+                    {item.quantity}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConsolidatedFilledSoldView({ mode }: { mode: "filled" | "sold" }) {
+  const { getTodaySummary } = useTransactionLog();
+  const type = mode === "filled" ? "add" : "subtract";
+  const label = mode === "filled" ? "filling" : "selling";
+  const colorClass = mode === "filled" ? "text-blue-700" : "text-red-700";
+  const bgClass = mode === "filled" ? "bg-blue-50" : "bg-red-50";
+  const borderClass = mode === "filled" ? "border-blue-200" : "border-red-200";
+  const headingBg =
+    mode === "filled" ? "bg-blue-100 text-blue-800" : "bg-red-100 text-red-800";
+
+  const pulseItems = getTodaySummary("LS Pulses", type);
+  const foodsItems = getTodaySummary("LS Foods LLP", type);
+
+  const nameSet = new Set<string>();
+  for (const p of pulseItems) nameSet.add(p.name);
+  for (const p of foodsItems) nameSet.add(p.name);
+
+  const combined = Array.from(nameSet)
+    .map((name) => ({
+      name,
+      quantity:
+        (pulseItems.find((p) => p.name === name)?.quantity ?? 0) +
+        (foodsItems.find((p) => p.name === name)?.quantity ?? 0),
+    }))
+    .filter((p) => p.quantity > 0);
+
+  return (
+    <div
+      className={`mx-4 mb-4 rounded-lg border ${borderClass} ${bgClass} overflow-hidden`}
+    >
+      <div
+        className={`px-4 py-2 text-xs font-bold uppercase tracking-wider ${headingBg}`}
+      >
+        Today's {mode === "filled" ? "Filling" : "Selling"} — Consolidated
+      </div>
+      {combined.length === 0 ? (
+        <div
+          className={`px-4 py-6 text-center text-sm ${colorClass} opacity-60`}
+        >
+          No {label} recorded today
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className={`border-b ${borderClass}`}>
+                <th
+                  className={`px-4 py-2 text-left font-semibold text-xs uppercase ${colorClass}`}
+                >
+                  Product
+                </th>
+                <th
+                  className={`px-4 py-2 text-right font-semibold text-xs uppercase ${colorClass}`}
+                >
+                  Bags
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {combined.map((item, idx) => (
+                <tr
+                  key={item.name}
+                  className={idx % 2 === 0 ? "bg-white/60" : ""}
+                >
+                  <td className="px-4 py-2 font-medium text-foreground">
+                    {item.name}
+                  </td>
+                  <td
+                    className={`px-4 py-2 text-right font-bold ${colorClass}`}
+                  >
+                    {item.quantity}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function InventoryTab() {
   const [activePlant, setActivePlant] = useState("ls-pulses");
+  const [viewMode, setViewMode] = useState<"inventory" | "filled" | "sold">(
+    "inventory",
+  );
   const { getAllProducts } = useInventoryStore();
   const { getTodaySummary } = useTransactionLog();
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -417,71 +581,73 @@ export default function InventoryTab() {
       INVENTORY_PRODUCTS,
     ).filter((p) => p.quantity > 0);
 
-    const formatSection = (
-      title: string,
+    const formatProductList = (
       products: { name: string; quantity: number }[],
-    ) => {
-      if (products.length === 0) return `--- ${title} ---\nNo entries`;
-      const rows = products.map((p) => `${p.name}: ${p.quantity}`).join("\n");
-      return `--- ${title} ---\n${rows}`;
-    };
+    ) => products.map((p) => `${p.name}: ${p.quantity}`).join("\n");
 
     const sections: string[] = [
       "\uD83D\uDCE6 LS Group Inventory Report",
-      `\uD83D\uDCC5 ${dateStr}`,
+      `Date: ${dateStr}`,
       "",
     ];
 
     const addedSections: string[] = [];
+
     if (selectedCategories.lsPulses) {
-      addedSections.push(formatSection("LS Pulses", pulseProducts));
+      const filling = getTodaySummary("LS Pulses", "add").filter(
+        (p) => p.quantity > 0,
+      );
+      const selling = getTodaySummary("LS Pulses", "subtract").filter(
+        (p) => p.quantity > 0,
+      );
+      let block = "--- LS Pulses ---";
+      if (filling.length > 0) {
+        block += `\nToday's Filling-\n${formatProductList(filling)}`;
+      }
+      if (selling.length > 0) {
+        block += `\nToday's Selling-\n${formatProductList(selling)}`;
+      }
+      if (pulseProducts.length > 0) {
+        block += `\nCurrent Inventory\n${formatProductList(pulseProducts)}`;
+      } else {
+        block += "\nNo entries";
+      }
+      addedSections.push(block);
     }
+
     if (selectedCategories.lsFoods) {
-      addedSections.push(formatSection("LS Foods LLP", foodsProducts));
+      const filling = getTodaySummary("LS Foods LLP", "add").filter(
+        (p) => p.quantity > 0,
+      );
+      const selling = getTodaySummary("LS Foods LLP", "subtract").filter(
+        (p) => p.quantity > 0,
+      );
+      let block = "--- LS Foods LLP ---";
+      if (filling.length > 0) {
+        block += `\nToday's Filling-\n${formatProductList(filling)}`;
+      }
+      if (selling.length > 0) {
+        block += `\nToday's Selling-\n${formatProductList(selling)}`;
+      }
+      if (foodsProducts.length > 0) {
+        block += `\nCurrent Inventory\n${formatProductList(foodsProducts)}`;
+      } else {
+        block += "\nNo entries";
+      }
+      addedSections.push(block);
     }
+
     if (selectedCategories.consolidated) {
-      addedSections.push(formatSection("Consolidated", consolidated));
+      if (consolidated.length > 0) {
+        addedSections.push(
+          `--- Consolidated ---\n${formatProductList(consolidated)}`,
+        );
+      } else {
+        addedSections.push("--- Consolidated ---\nNo entries");
+      }
     }
 
     sections.push(addedSections.join("\n\n"));
-
-    // Today's Filling — only for LS Pulses and/or LS Foods LLP if selected
-    const pulseFilling = selectedCategories.lsPulses
-      ? getTodaySummary("LS Pulses", "add")
-      : [];
-    const foodsFilling = selectedCategories.lsFoods
-      ? getTodaySummary("LS Foods LLP", "add")
-      : [];
-
-    if (pulseFilling.length > 0 || foodsFilling.length > 0) {
-      sections.push("");
-      sections.push("=== TODAY'S FILLING ===");
-      if (pulseFilling.length > 0)
-        sections.push(formatSection("LS Pulses", pulseFilling));
-      if (foodsFilling.length > 0) {
-        if (pulseFilling.length > 0) sections.push("");
-        sections.push(formatSection("LS Foods LLP", foodsFilling));
-      }
-    }
-
-    // Today's Selling — only for LS Pulses and/or LS Foods LLP if selected
-    const pulseSelling = selectedCategories.lsPulses
-      ? getTodaySummary("LS Pulses", "subtract")
-      : [];
-    const foodsSelling = selectedCategories.lsFoods
-      ? getTodaySummary("LS Foods LLP", "subtract")
-      : [];
-
-    if (pulseSelling.length > 0 || foodsSelling.length > 0) {
-      sections.push("");
-      sections.push("=== TODAY'S SELLING ===");
-      if (pulseSelling.length > 0)
-        sections.push(formatSection("LS Pulses", pulseSelling));
-      if (foodsSelling.length > 0) {
-        if (pulseSelling.length > 0) sections.push("");
-        sections.push(formatSection("LS Foods LLP", foodsSelling));
-      }
-    }
 
     const report = sections.join("\n");
     window.open(`https://wa.me/?text=${encodeURIComponent(report)}`, "_blank");
@@ -514,11 +680,56 @@ export default function InventoryTab() {
               </span>
             </div>
           </div>
+          {/* View mode toggle */}
+          <div className="flex items-center gap-1.5 mt-2">
+            <button
+              type="button"
+              data-ocid="inventory.tab"
+              onClick={() => setViewMode("inventory")}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold border transition-colors ${
+                viewMode === "inventory"
+                  ? "bg-green-600 text-white border-green-600"
+                  : "bg-transparent text-green-700 border-green-400 hover:bg-green-50"
+              }`}
+            >
+              <LayoutList className="w-3 h-3" />
+              Inventory
+            </button>
+            <button
+              type="button"
+              data-ocid="inventory.tab"
+              onClick={() => setViewMode("filled")}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold border transition-colors ${
+                viewMode === "filled"
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-transparent text-blue-700 border-blue-400 hover:bg-blue-50"
+              }`}
+            >
+              <TrendingUp className="w-3 h-3" />
+              Filled
+            </button>
+            <button
+              type="button"
+              data-ocid="inventory.tab"
+              onClick={() => setViewMode("sold")}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold border transition-colors ${
+                viewMode === "sold"
+                  ? "bg-red-600 text-white border-red-600"
+                  : "bg-transparent text-red-700 border-red-400 hover:bg-red-50"
+              }`}
+            >
+              <TrendingDown className="w-3 h-3" />
+              Sold
+            </button>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           <Tabs
             value={activePlant}
-            onValueChange={setActivePlant}
+            onValueChange={(val) => {
+              setActivePlant(val);
+              setViewMode("inventory");
+            }}
             className="w-full"
           >
             <div className="px-4 pt-4">
@@ -548,11 +759,19 @@ export default function InventoryTab() {
                 value={plant.toLowerCase().replace(/\s+/g, "-")}
                 className="mt-0 pt-3"
               >
-                <PlantInventory plantKey={plant} />
+                {viewMode === "inventory" ? (
+                  <PlantInventory plantKey={plant} />
+                ) : (
+                  <FilledSoldView plant={plant} mode={viewMode} />
+                )}
               </TabsContent>
             ))}
             <TabsContent value="consolidated" className="mt-0 pt-3">
-              <ConsolidatedInventory />
+              {viewMode === "inventory" ? (
+                <ConsolidatedInventory />
+              ) : (
+                <ConsolidatedFilledSoldView mode={viewMode} />
+              )}
             </TabsContent>
           </Tabs>
         </CardContent>

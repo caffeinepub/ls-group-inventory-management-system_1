@@ -840,7 +840,7 @@ export default function BardanaTab() {
 
     const sections: string[] = [
       "\uD83D\uDCE6 LS Group Bardana Report",
-      `\uD83D\uDCC5 ${dateStr}`,
+      `Date: ${dateStr}`,
       "",
     ];
     const addedSections: string[] = [];
