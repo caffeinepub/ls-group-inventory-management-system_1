@@ -9,7 +9,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/contexts/AuthContext";
 import { type OrderListsData, useDataStore } from "@/contexts/DataStoreContext";
+import { useChangeLog } from "@/hooks/useChangeLog";
 import {
   type DeliveryRecord,
   type OrderRecord,
@@ -680,6 +682,8 @@ function ActiveOrdersTable({
   categoryFilter: "Dal" | "Cattle Feed";
 }) {
   const { addOrder, updateOrder, deleteOrder, addDelivery } = store;
+  const { logOrderChange } = useChangeLog();
+  const { currentUser } = useAuth();
 
   const [newRow, setNewRow] = useState<EditableOrder | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -720,6 +724,18 @@ function ActiveOrdersTable({
         remarks: newRow.remarks,
         category: newRow.category,
       });
+      logOrderChange(
+        {
+          date: newRow.date,
+          orderedBags: newRow.orderedBags,
+          brand: newRow.brand,
+          partyName: newRow.partyName,
+          rate: newRow.rate,
+          dalalName: newRow.dalalName,
+        },
+        Number(newRow.orderedBags) || 0,
+        currentUser?.username ?? "unknown",
+      );
       setNewRow(null);
       toast.success("Order saved");
     } catch {
@@ -768,12 +784,27 @@ function ActiveOrdersTable({
 
   const handleAddDelivery = (orderId: string, d: EditableDelivery) => {
     try {
+      const parentOrder = orders.find((o) => o.id === orderId);
       addDelivery(orderId, {
         date: d.date,
         deliveredBags: d.deliveredBags,
         brand: d.brand,
         remarks: d.remarks,
       });
+      if (parentOrder) {
+        logOrderChange(
+          {
+            date: parentOrder.date,
+            orderedBags: parentOrder.orderedBags,
+            brand: d.brand,
+            partyName: parentOrder.partyName,
+            rate: parentOrder.rate,
+            dalalName: parentOrder.dalalName,
+          },
+          -(Number(d.deliveredBags) || 0),
+          currentUser?.username ?? "unknown",
+        );
+      }
       setAddingDeliveryId(null);
       toast.success("Delivery added");
     } catch {

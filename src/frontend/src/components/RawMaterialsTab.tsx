@@ -8,7 +8,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,21 +21,12 @@ import {
   sortProducts,
   useRawMaterialsStore,
 } from "@/hooks/useInventoryStore";
-import {
-  ArrowDown,
-  ArrowUp,
-  Check,
-  FlaskConical,
-  Pencil,
-  Plus,
-  Trash2,
-  X,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, FlaskConical, Plus, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 function ConsolidatedRawMaterials() {
-  const { getAllProducts } = useRawMaterialsStore();
+  const { getAllProducts, getUnit } = useRawMaterialsStore();
   const pulseProducts = getAllProducts("LS Pulses");
   const foodsProducts = getAllProducts("LS Foods LLP");
 
@@ -44,13 +34,26 @@ function ConsolidatedRawMaterials() {
   for (const p of pulseProducts) nameSet.add(p.name);
   for (const p of foodsProducts) nameSet.add(p.name);
 
-  const merged = Array.from(nameSet).map((name) => {
+  const mergedMap = new Map<
+    string,
+    { name: string; quantity: number; unit: string }
+  >();
+  for (const name of nameSet) {
     const pulseQty = pulseProducts.find((p) => p.name === name)?.quantity ?? 0;
     const foodsQty = foodsProducts.find((p) => p.name === name)?.quantity ?? 0;
-    return { name, quantity: pulseQty + foodsQty };
-  });
+    const unit =
+      getUnit("LS Pulses", name) || getUnit("LS Foods LLP", name) || "";
+    mergedMap.set(name, { name, quantity: pulseQty + foodsQty, unit });
+  }
 
-  const sorted = sortProducts(merged, RAW_MATERIAL_PRODUCTS);
+  const sortedBase = sortProducts(
+    Array.from(mergedMap.values()),
+    RAW_MATERIAL_PRODUCTS,
+  );
+  const sorted = sortedBase.map((p) => ({
+    ...p,
+    unit: mergedMap.get(p.name)?.unit ?? "",
+  }));
 
   return (
     <>
@@ -66,6 +69,9 @@ function ConsolidatedRawMaterials() {
               </th>
               <th className="text-center px-4 py-2.5 font-semibold text-foreground w-48">
                 Consolidated Stock
+              </th>
+              <th className="text-center px-4 py-2.5 font-semibold text-foreground w-32">
+                Unit
               </th>
             </tr>
           </thead>
@@ -83,18 +89,20 @@ function ConsolidatedRawMaterials() {
                   {product.name}
                 </td>
                 <td className="px-4 py-2.5 text-center">
-                  <Badge
-                    variant={product.quantity > 0 ? "default" : "secondary"}
+                  <span
                     className={
                       product.quantity > 0
-                        ? "bg-purple-100 text-purple-800 border border-purple-300 font-bold text-sm px-3"
-                        : "font-bold text-sm px-3"
+                        ? "inline-flex items-center justify-center px-3 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-300 font-bold text-sm"
+                        : "inline-flex items-center justify-center px-3 py-0.5 rounded bg-muted text-muted-foreground font-bold text-sm"
                     }
                   >
                     {product.quantity % 1 === 0
                       ? product.quantity.toFixed(0)
                       : product.quantity}
-                  </Badge>
+                  </span>
+                </td>
+                <td className="px-4 py-2.5 text-center text-sm text-muted-foreground">
+                  {product.unit || "—"}
                 </td>
               </tr>
             ))}
@@ -117,40 +125,97 @@ function PlantRawMaterials({ plantKey }: { plantKey: string }) {
     addProduct,
     deleteProduct,
     reorderProduct,
+    getUnit,
+    setUnit,
   } = useRawMaterialsStore();
   const { currentUser } = useAuth();
-  const [editingProduct, setEditingProduct] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState<string>("");
   const [showAddRow, setShowAddRow] = useState(false);
   const [newProductName, setNewProductName] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Inline editing state: maps product name -> current edit value
+  const [stockEditValues, setStockEditValues] = useState<
+    Record<string, string>
+  >({});
+  const [unitEditValues, setUnitEditValues] = useState<Record<string, string>>(
+    {},
+  );
+
   const isAdmin = currentUser?.role === "admin";
 
   const products = getOrderedProducts(plantKey);
 
-  const startEdit = (productName: string, currentQty: number) => {
-    setEditingProduct(productName);
-    setEditValue(String(currentQty));
+  const handleStockChange = (productName: string, value: string) => {
+    setStockEditValues((prev) => ({ ...prev, [productName]: value }));
   };
 
-  const cancelEdit = () => {
-    setEditingProduct(null);
-    setEditValue("");
-  };
-
-  const saveEdit = (productName: string) => {
-    const qty = Number.parseFloat(editValue);
+  const handleStockBlur = (productName: string, currentQty: number) => {
+    const raw = stockEditValues[productName];
+    if (raw === undefined) return;
+    const qty = Number.parseFloat(raw);
     if (Number.isNaN(qty) || qty < 0) {
       toast.error("Value must be a non-negative number");
+      // Reset to current qty
+      setStockEditValues((prev) => {
+        const next = { ...prev };
+        delete next[productName];
+        return next;
+      });
       return;
     }
+    if (qty !== currentQty) {
+      setStock(plantKey, productName, qty);
+      toast.success(`Updated ${productName} to ${qty}`);
+    }
+    setStockEditValues((prev) => {
+      const next = { ...prev };
+      delete next[productName];
+      return next;
+    });
+  };
 
-    setStock(plantKey, productName, qty);
-    toast.success(`Updated ${productName} to ${qty}`);
-    setEditingProduct(null);
-    setEditValue("");
+  const handleStockKeyDown = (e: React.KeyboardEvent, productName: string) => {
+    if (e.key === "Enter") {
+      (e.target as HTMLInputElement).blur();
+    }
+    if (e.key === "Escape") {
+      setStockEditValues((prev) => {
+        const next = { ...prev };
+        delete next[productName];
+        return next;
+      });
+      (e.target as HTMLInputElement).blur();
+    }
+  };
+
+  const handleUnitChange = (productName: string, value: string) => {
+    setUnitEditValues((prev) => ({ ...prev, [productName]: value }));
+  };
+
+  const handleUnitBlur = (productName: string) => {
+    const raw = unitEditValues[productName];
+    if (raw === undefined) return;
+    setUnit(plantKey, productName, raw.trim());
+    setUnitEditValues((prev) => {
+      const next = { ...prev };
+      delete next[productName];
+      return next;
+    });
+  };
+
+  const handleUnitKeyDown = (e: React.KeyboardEvent, productName: string) => {
+    if (e.key === "Enter") {
+      (e.target as HTMLInputElement).blur();
+    }
+    if (e.key === "Escape") {
+      setUnitEditValues((prev) => {
+        const next = { ...prev };
+        delete next[productName];
+        return next;
+      });
+      (e.target as HTMLInputElement).blur();
+    }
   };
 
   const handleShowAddRow = () => {
@@ -187,7 +252,8 @@ function PlantRawMaterials({ plantKey }: { plantKey: string }) {
     setDeleteConfirm(null);
   };
 
-  const colSpan = isAdmin ? 7 : 6;
+  // Columns: #, Product, Current Stock (editable), Unit (editable), Order, [Delete]
+  const colSpan = isAdmin ? 5 : 4;
 
   return (
     <>
@@ -204,11 +270,8 @@ function PlantRawMaterials({ plantKey }: { plantKey: string }) {
               <th className="text-center px-4 py-2.5 font-semibold text-foreground w-40">
                 Current Stock
               </th>
-              <th className="text-center px-4 py-2.5 font-semibold text-foreground w-56">
-                Edit Stock
-              </th>
               <th className="text-center px-4 py-2.5 font-semibold text-foreground w-32">
-                Action
+                Unit
               </th>
               <th className="text-center px-4 py-2.5 font-semibold text-foreground w-20">
                 Order
@@ -221,138 +284,106 @@ function PlantRawMaterials({ plantKey }: { plantKey: string }) {
             </tr>
           </thead>
           <tbody>
-            {products.map((product, idx) => (
-              <tr
-                key={product.name}
-                data-ocid={`rawmat.item.${idx + 1}`}
-                className="border-b border-border hover:bg-muted/30 transition-colors"
-              >
-                <td className="px-4 py-2.5 text-muted-foreground text-xs">
-                  {idx + 1}
-                </td>
-                <td className="px-4 py-2.5 font-medium text-foreground">
-                  {product.name}
-                </td>
-                <td className="px-4 py-2.5 text-center">
-                  <Badge
-                    variant={product.quantity > 0 ? "default" : "secondary"}
-                    className={
-                      product.quantity > 0
-                        ? "bg-purple-100 text-purple-800 border-purple-200 font-bold text-sm px-3"
-                        : "font-bold text-sm px-3"
-                    }
-                  >
-                    {product.quantity % 1 === 0
-                      ? product.quantity.toFixed(0)
-                      : product.quantity}
-                  </Badge>
-                </td>
-                <td className="px-4 py-2.5 text-center">
-                  {editingProduct === product.name ? (
+            {products.map((product, idx) => {
+              const stockVal =
+                stockEditValues[product.name] ?? String(product.quantity);
+              const unitVal =
+                unitEditValues[product.name] ?? getUnit(plantKey, product.name);
+              return (
+                <tr
+                  key={product.name}
+                  data-ocid={`rawmat.item.${idx + 1}`}
+                  className="border-b border-border hover:bg-muted/30 transition-colors"
+                >
+                  <td className="px-4 py-2.5 text-muted-foreground text-xs">
+                    {idx + 1}
+                  </td>
+                  <td className="px-4 py-2.5 font-medium text-foreground">
+                    {product.name}
+                  </td>
+                  <td className="px-4 py-2.5 text-center">
                     <Input
                       type="number"
                       min="0"
                       step="0.01"
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      className="w-32 mx-auto text-center h-8 text-sm"
+                      value={stockVal}
+                      onChange={(e) =>
+                        handleStockChange(product.name, e.target.value)
+                      }
+                      onBlur={() =>
+                        handleStockBlur(product.name, product.quantity)
+                      }
+                      onKeyDown={(e) => handleStockKeyDown(e, product.name)}
+                      className="w-28 mx-auto text-center h-8 text-sm"
                       data-ocid="rawmat.input"
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") saveEdit(product.name);
-                        if (e.key === "Escape") cancelEdit();
-                      }}
                     />
-                  ) : (
-                    <span className="text-muted-foreground text-xs">—</span>
-                  )}
-                </td>
-                <td className="px-4 py-2.5 text-center">
-                  {editingProduct === product.name ? (
-                    <div className="flex items-center justify-center gap-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 px-2 border-green-400 text-green-700 hover:bg-green-50"
-                        data-ocid={`rawmat.save_button.${idx + 1}`}
-                        onClick={() => saveEdit(product.name)}
-                      >
-                        <Check className="w-3 h-3" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 px-2 border-red-400 text-red-700 hover:bg-red-50"
-                        data-ocid={`rawmat.cancel_button.${idx + 1}`}
-                        onClick={cancelEdit}
-                      >
-                        <X className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 px-3 text-xs"
-                      data-ocid={`rawmat.edit_button.${idx + 1}`}
-                      onClick={() => startEdit(product.name, product.quantity)}
-                    >
-                      <Pencil className="w-3 h-3 mr-1" />
-                      Edit
-                    </Button>
-                  )}
-                </td>
-                <td className="px-4 py-2.5 text-center">
-                  <div className="flex items-center justify-center gap-1">
-                    <button
-                      type="button"
-                      disabled={idx === 0}
-                      onClick={() =>
-                        reorderProduct(plantKey, product.name, "up")
-                      }
-                      className="inline-flex items-center justify-center w-7 h-7 rounded
-                        bg-muted text-muted-foreground border border-border
-                        hover:bg-accent hover:text-accent-foreground
-                        disabled:opacity-30 disabled:cursor-not-allowed
-                        transition-all duration-150 cursor-pointer"
-                      title="Move up"
-                    >
-                      <ArrowUp className="w-3 h-3" />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={idx === products.length - 1}
-                      onClick={() =>
-                        reorderProduct(plantKey, product.name, "down")
-                      }
-                      className="inline-flex items-center justify-center w-7 h-7 rounded
-                        bg-muted text-muted-foreground border border-border
-                        hover:bg-accent hover:text-accent-foreground
-                        disabled:opacity-30 disabled:cursor-not-allowed
-                        transition-all duration-150 cursor-pointer"
-                      title="Move down"
-                    >
-                      <ArrowDown className="w-3 h-3" />
-                    </button>
-                  </div>
-                </td>
-                {isAdmin && (
-                  <td className="px-4 py-2.5 text-center">
-                    <button
-                      type="button"
-                      onClick={() => setDeleteConfirm(product.name)}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-md
-                        bg-red-50 text-red-600 border border-red-200
-                        hover:bg-red-100 hover:border-red-400
-                        transition-all duration-150 cursor-pointer"
-                      title={`Delete ${product.name}`}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
                   </td>
-                )}
-              </tr>
-            ))}
+                  <td className="px-4 py-2.5 text-center">
+                    <Input
+                      type="text"
+                      placeholder="e.g. kg"
+                      value={unitVal}
+                      onChange={(e) =>
+                        handleUnitChange(product.name, e.target.value)
+                      }
+                      onBlur={() => handleUnitBlur(product.name)}
+                      onKeyDown={(e) => handleUnitKeyDown(e, product.name)}
+                      className="w-24 mx-auto text-center h-8 text-sm"
+                      data-ocid="rawmat.input"
+                    />
+                  </td>
+                  <td className="px-4 py-2.5 text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() =>
+                          reorderProduct(plantKey, product.name, "up")
+                        }
+                        className="inline-flex items-center justify-center w-7 h-7 rounded
+                          bg-muted text-muted-foreground border border-border
+                          hover:bg-accent hover:text-accent-foreground
+                          disabled:opacity-30 disabled:cursor-not-allowed
+                          transition-all duration-150 cursor-pointer"
+                        title="Move up"
+                      >
+                        <ArrowUp className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === products.length - 1}
+                        onClick={() =>
+                          reorderProduct(plantKey, product.name, "down")
+                        }
+                        className="inline-flex items-center justify-center w-7 h-7 rounded
+                          bg-muted text-muted-foreground border border-border
+                          hover:bg-accent hover:text-accent-foreground
+                          disabled:opacity-30 disabled:cursor-not-allowed
+                          transition-all duration-150 cursor-pointer"
+                        title="Move down"
+                      >
+                        <ArrowDown className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </td>
+                  {isAdmin && (
+                    <td className="px-4 py-2.5 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirm(product.name)}
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-md
+                          bg-red-50 text-red-600 border border-red-200
+                          hover:bg-red-100 hover:border-red-400
+                          transition-all duration-150 cursor-pointer"
+                        title={`Delete ${product.name}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
             {showAddRow && isAdmin && (
               <tr className="border-b border-border bg-muted/10">
                 <td colSpan={colSpan} className="px-4 py-2.5">

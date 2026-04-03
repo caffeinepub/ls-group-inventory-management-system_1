@@ -32,9 +32,10 @@ function ColumnBadge({ column }: { column: string }) {
 }
 
 export default function ChangeLogTab() {
-  const { getInventoryLog, getBardanaLog } = useChangeLog();
+  const { getInventoryLog, getBardanaLog, getOrderLog } = useChangeLog();
   const inventoryLogs = getInventoryLog();
   const bardanaLogs = getBardanaLog();
+  const orderLogs = getOrderLog();
 
   return (
     <Card className="border border-border shadow-sm">
@@ -57,6 +58,7 @@ export default function ChangeLogTab() {
                 data-[state=active]:bg-blue-600 data-[state=active]:text-white
                 data-[state=active]:shadow-sm
                 text-blue-700 hover:text-blue-800"
+              data-ocid="changelog.tab"
             >
               📊 Inventory
             </TabsTrigger>
@@ -67,8 +69,20 @@ export default function ChangeLogTab() {
                 data-[state=active]:bg-amber-500 data-[state=active]:text-white
                 data-[state=active]:shadow-sm
                 text-amber-700 hover:text-amber-800"
+              data-ocid="changelog.tab"
             >
               📦 Bardana
+            </TabsTrigger>
+            {/* Orders tab - green color coding */}
+            <TabsTrigger
+              value="orders"
+              className="flex-1 text-sm font-semibold
+                data-[state=active]:bg-green-600 data-[state=active]:text-white
+                data-[state=active]:shadow-sm
+                text-green-700 hover:text-green-800"
+              data-ocid="changelog.tab"
+            >
+              🛒 Orders
             </TabsTrigger>
           </TabsList>
 
@@ -146,6 +160,7 @@ export default function ChangeLogTab() {
                       <td
                         colSpan={5}
                         className="px-4 py-12 text-center text-muted-foreground text-sm"
+                        data-ocid="changelog.empty_state"
                       >
                         No inventory changes in the past 5 days.
                       </td>
@@ -244,8 +259,113 @@ export default function ChangeLogTab() {
                       <td
                         colSpan={7}
                         className="px-4 py-12 text-center text-muted-foreground text-sm"
+                        data-ocid="changelog.empty_state"
                       >
                         No bardana changes in the past 5 days.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </TabsContent>
+
+          {/* Orders Sub-Tab */}
+          <TabsContent value="orders" className="mt-0">
+            <div className="bg-green-50/40 px-4 py-1.5 border-b border-green-100">
+              <span className="text-xs text-green-700 font-medium">
+                Showing order creation and delivery changes for the last 5 days
+              </span>
+            </div>
+            <div className="overflow-auto h-[540px]">
+              <table className="min-w-full text-sm">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-green-50 border-b border-green-200 backdrop-blur-sm">
+                    <th className="text-left px-4 py-2.5 font-semibold text-green-900 whitespace-nowrap">
+                      Date
+                    </th>
+                    <th className="text-left px-4 py-2.5 font-semibold text-green-900 whitespace-nowrap">
+                      Order Date
+                    </th>
+                    <th className="text-center px-4 py-2.5 font-semibold text-green-900 whitespace-nowrap">
+                      Ordered Bags
+                    </th>
+                    <th className="text-left px-4 py-2.5 font-semibold text-green-900 whitespace-nowrap">
+                      Brand
+                    </th>
+                    <th className="text-left px-4 py-2.5 font-semibold text-green-900 whitespace-nowrap">
+                      Party Name
+                    </th>
+                    <th className="text-left px-4 py-2.5 font-semibold text-green-900 whitespace-nowrap">
+                      Rate(Qtl)
+                    </th>
+                    <th className="text-left px-4 py-2.5 font-semibold text-green-900 whitespace-nowrap">
+                      Broker
+                    </th>
+                    <th className="text-center px-4 py-2.5 font-semibold text-green-900 whitespace-nowrap">
+                      Qty Change
+                    </th>
+                    <th className="text-left px-4 py-2.5 font-semibold text-green-900 whitespace-nowrap">
+                      User ID
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orderLogs.length > 0 ? (
+                    orderLogs.map((log) => {
+                      const isPositive = log.qtyChange > 0;
+                      return (
+                        <tr
+                          key={log.id}
+                          className="border-b border-border hover:bg-green-50/30 transition-colors"
+                        >
+                          <td className="px-4 py-2.5 text-sm font-mono text-muted-foreground whitespace-nowrap">
+                            {formatDate(log.timestamp)}
+                          </td>
+                          <td className="px-4 py-2.5 text-sm whitespace-nowrap">
+                            {log.orderDate}
+                          </td>
+                          <td className="px-4 py-2.5 text-center text-sm tabular-nums whitespace-nowrap">
+                            {log.orderedBags}
+                          </td>
+                          <td className="px-4 py-2.5 text-sm font-medium text-foreground whitespace-nowrap">
+                            {log.brand}
+                          </td>
+                          <td className="px-4 py-2.5 text-sm whitespace-nowrap">
+                            {log.partyName}
+                          </td>
+                          <td className="px-4 py-2.5 text-sm whitespace-nowrap">
+                            {log.rate}
+                          </td>
+                          <td className="px-4 py-2.5 text-sm whitespace-nowrap">
+                            {log.broker}
+                          </td>
+                          <td className="px-4 py-2.5 text-center whitespace-nowrap">
+                            <span
+                              className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded text-xs font-bold ${
+                                isPositive
+                                  ? "bg-green-100 text-green-800"
+                                  : "bg-red-100 text-red-800"
+                              }`}
+                            >
+                              {isPositive ? "+" : ""}
+                              {log.qtyChange}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-sm text-muted-foreground capitalize whitespace-nowrap">
+                            {log.userId}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan={9}
+                        className="px-4 py-12 text-center text-muted-foreground text-sm"
+                        data-ocid="changelog.empty_state"
+                      >
+                        No order changes in the past 5 days.
                       </td>
                     </tr>
                   )}

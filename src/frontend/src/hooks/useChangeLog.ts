@@ -1,16 +1,17 @@
 /**
- * Context-based change log for Inventory and Bardana tabs.
+ * Context-based change log for Inventory, Bardana, and Orders tabs.
  * Captures the last 5 days of changes, shared across all users/devices.
  */
 
 import {
   type BardanaLogEntry,
   type InventoryLogEntry,
+  type OrderLogEntry,
   useDataStore,
 } from "@/contexts/DataStoreContext";
 
 // Re-export types for compatibility
-export type { BardanaLogEntry, InventoryLogEntry };
+export type { BardanaLogEntry, InventoryLogEntry, OrderLogEntry };
 
 const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
 
@@ -23,8 +24,10 @@ export function useChangeLog() {
   const {
     changeLogInventory,
     changeLogBardana,
+    changeLogOrders,
     updateChangeLogInventory,
     updateChangeLogBardana,
+    updateChangeLogOrders,
   } = useDataStore();
 
   const logInventoryChange = (
@@ -69,6 +72,35 @@ export function useChangeLog() {
     updateChangeLogBardana([entry, ...pruned]);
   };
 
+  const logOrderChange = (
+    order: {
+      date: string;
+      orderedBags: string;
+      brand: string;
+      partyName: string;
+      rate: string;
+      dalalName: string;
+    },
+    qtyChange: number,
+    userId: string,
+  ): void => {
+    if (qtyChange === 0) return;
+    const pruned = prune(changeLogOrders);
+    const entry: OrderLogEntry = {
+      id: `ord_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      timestamp: Date.now(),
+      orderDate: order.date,
+      orderedBags: order.orderedBags,
+      brand: order.brand,
+      partyName: order.partyName,
+      rate: order.rate,
+      broker: order.dalalName,
+      qtyChange,
+      userId,
+    };
+    updateChangeLogOrders([entry, ...pruned]);
+  };
+
   const getInventoryLog = (): InventoryLogEntry[] =>
     prune(changeLogInventory).sort((a, b) => b.timestamp - a.timestamp);
 
@@ -77,10 +109,15 @@ export function useChangeLog() {
       .map((e) => ({ ...e, column: e.column ?? "Initial Stock" }))
       .sort((a, b) => b.timestamp - a.timestamp);
 
+  const getOrderLog = (): OrderLogEntry[] =>
+    prune(changeLogOrders).sort((a, b) => b.timestamp - a.timestamp);
+
   return {
     logInventoryChange,
     logBardanaChange,
+    logOrderChange,
     getInventoryLog,
     getBardanaLog,
+    getOrderLog,
   };
 }

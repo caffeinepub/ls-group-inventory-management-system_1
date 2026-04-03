@@ -411,11 +411,36 @@ export function useBardanaStore() {
 
 export function useRawMaterialsStore() {
   const { rawMaterialsData, updateRawMaterialsData } = useDataStore();
-  return usePlantDataStore(
+  const base = usePlantDataStore(
     rawMaterialsData,
     updateRawMaterialsData,
     RAW_MATERIAL_PRODUCTS,
   );
+
+  const pd = (plant: string): PlantData =>
+    rawMaterialsData[plant] ?? {
+      quantities: {},
+      customProducts: [],
+      deletedBuiltins: [],
+      productOrder: [],
+      units: {},
+    };
+
+  const getUnit = (plant: string, productName: string): string =>
+    pd(plant).units?.[productName] ?? "";
+
+  const setUnit = (plant: string, productName: string, unit: string): void => {
+    const plantData = pd(plant);
+    updateRawMaterialsData({
+      ...rawMaterialsData,
+      [plant]: {
+        ...plantData,
+        units: { ...(plantData.units ?? {}), [productName]: unit },
+      },
+    });
+  };
+
+  return { ...base, getUnit, setUnit };
 }
 
 // ─── Orders Store ─────────────────────────────────────────────────────────────────

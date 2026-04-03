@@ -32,6 +32,7 @@ interface JsonBackend {
       string,
       string,
       string,
+      string,
     ]
   >;
   getInventory(): Promise<string>;
@@ -54,6 +55,8 @@ interface JsonBackend {
   setUsers(data: string): Promise<void>;
   getOrderLists(): Promise<string>;
   setOrderLists(data: string): Promise<void>;
+  getChangeLogOrders(): Promise<string>;
+  setChangeLogOrders(data: string): Promise<void>;
 }
 
 // ─── Types ─────────────────────────────────────────────────────────────────────────────
@@ -72,6 +75,7 @@ export interface PlantData {
   customProducts: string[];
   deletedBuiltins: string[];
   productOrder: string[];
+  units?: Record<string, string>;
 }
 
 export interface BardanaEntry {
@@ -144,6 +148,19 @@ export interface BardanaLogEntry {
   userId: string;
 }
 
+export interface OrderLogEntry {
+  id: string;
+  timestamp: number;
+  orderDate: string;
+  orderedBags: string;
+  brand: string;
+  partyName: string;
+  rate: string;
+  broker: string;
+  qtyChange: number;
+  userId: string;
+}
+
 export interface TransactionEntry {
   id: string;
   plant: string;
@@ -192,6 +209,7 @@ const FIELD_CHANGELOG_BARDANA = 6;
 const FIELD_TRANSACTION_LOG = 7;
 const FIELD_USERS = 8;
 const FIELD_ORDER_LISTS = 9;
+const FIELD_CHANGELOG_ORDERS = 10;
 
 // ─── Backend singleton (lazy) ──────────────────────────────────────────────────────────
 
@@ -219,6 +237,7 @@ interface DataStoreValue {
   toolsData: ToolRecord[];
   changeLogInventory: InventoryLogEntry[];
   changeLogBardana: BardanaLogEntry[];
+  changeLogOrders: OrderLogEntry[];
   transactionLog: TransactionEntry[];
   users: User[];
   orderListsData: OrderListsData;
@@ -229,6 +248,7 @@ interface DataStoreValue {
   updateToolsData: (data: ToolRecord[]) => void;
   updateChangeLogInventory: (data: InventoryLogEntry[]) => void;
   updateChangeLogBardana: (data: BardanaLogEntry[]) => void;
+  updateChangeLogOrders: (data: OrderLogEntry[]) => void;
   updateTransactionLog: (data: TransactionEntry[]) => void;
   updateUsers: (data: User[]) => void;
   updateOrderListsData: (data: OrderListsData) => void;
@@ -298,88 +318,60 @@ export function DataStoreProvider({ children }: { children: React.ReactNode }) {
   const [changeLogBardana, setChangeLogBardana] = useState<BardanaLogEntry[]>(
     [],
   );
+  const [changeLogOrders, setChangeLogOrders] = useState<OrderLogEntry[]>([]);
   const [transactionLog, setTransactionLog] = useState<TransactionEntry[]>([]);
   const [users, setUsers] = useState<User[]>(DEFAULT_USERS);
   const [orderListsData, setOrderListsData] =
     useState<OrderListsData>(DEFAULT_ORDER_LISTS);
 
   // Last known JSON from the backend (for change detection)
-  const lastJsonRef = useRef<string[]>(Array(10).fill(""));
+  const lastJsonRef = useRef<string[]>(Array(11).fill(""));
 
   // Pending writes counter per field — prevents polling from overwriting
   // optimistic updates while a backend write is still in flight.
-  const pendingWritesRef = useRef<number[]>(Array(10).fill(0));
+  const pendingWritesRef = useRef<number[]>(Array(11).fill(0));
 
-  const applyAllData = useCallback(
-    (
-      data: [
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-        string,
-      ],
-    ) => {
-      const [
-        inv,
-        bard,
-        orders,
-        tools,
-        raw,
-        clInv,
-        clBard,
-        txn,
-        usr,
-        orderLists,
-      ] = data;
+  const applyAllData = useCallback((data: string[]) => {
+    const inv = data[0] ?? "";
+    const bard = data[1] ?? "";
+    const orders = data[2] ?? "";
+    const tools = data[3] ?? "";
+    const raw = data[4] ?? "";
+    const clInv = data[5] ?? "";
+    const clBard = data[6] ?? "";
+    const txn = data[7] ?? "";
+    const usr = data[8] ?? "";
+    const orderLists = data[9] ?? "";
+    const clOrders = data[10] ?? "";
 
-      setInventoryData(parseOrDefault<InventoryData>(inv, {}));
-      setBardanaData(normalizeBardanaStore(parseOrDefault<unknown>(bard, {})));
-      setRawMaterialsData(parseOrDefault<InventoryData>(raw, {}));
-      setOrdersData(parseOrDefault<OrderRecord[]>(orders, []));
-      setToolsData(parseOrDefault<ToolRecord[]>(tools, []));
-      setChangeLogInventory(parseOrDefault<InventoryLogEntry[]>(clInv, []));
-      setChangeLogBardana(parseOrDefault<BardanaLogEntry[]>(clBard, []));
-      setTransactionLog(parseOrDefault<TransactionEntry[]>(txn, []));
+    setInventoryData(parseOrDefault<InventoryData>(inv, {}));
+    setBardanaData(normalizeBardanaStore(parseOrDefault<unknown>(bard, {})));
+    setRawMaterialsData(parseOrDefault<InventoryData>(raw, {}));
+    setOrdersData(parseOrDefault<OrderRecord[]>(orders, []));
+    setToolsData(parseOrDefault<ToolRecord[]>(tools, []));
+    setChangeLogInventory(parseOrDefault<InventoryLogEntry[]>(clInv, []));
+    setChangeLogBardana(parseOrDefault<BardanaLogEntry[]>(clBard, []));
+    setChangeLogOrders(parseOrDefault<OrderLogEntry[]>(clOrders, []));
+    setTransactionLog(parseOrDefault<TransactionEntry[]>(txn, []));
 
-      const parsedUsers = parseOrDefault<User[]>(usr, []);
-      setUsers(parsedUsers.length > 0 ? parsedUsers : DEFAULT_USERS);
+    const parsedUsers = parseOrDefault<User[]>(usr, []);
+    setUsers(parsedUsers.length > 0 ? parsedUsers : DEFAULT_USERS);
 
-      setOrderListsData(
-        normalizeOrderLists(parseOrDefault<unknown>(orderLists, {})),
-      );
-    },
-    [],
-  );
+    setOrderListsData(
+      normalizeOrderLists(parseOrDefault<unknown>(orderLists, {})),
+    );
+  }, []);
 
   // Initial load
   useEffect(() => {
     getActor()
       .then((actor) => actor.getAllData())
       .then((data) => {
-        // Backend may return 9-tuple (old) or 10-tuple (new); pad if needed
+        // Backend may return 10-tuple (old) or 11-tuple (new); pad if needed
         const padded = [...data] as string[];
-        while (padded.length < 10) padded.push("");
+        while (padded.length < 11) padded.push("");
         lastJsonRef.current = padded;
-        applyAllData(
-          padded as [
-            string,
-            string,
-            string,
-            string,
-            string,
-            string,
-            string,
-            string,
-            string,
-            string,
-          ],
-        );
+        applyAllData(padded);
         setIsLoading(false);
       })
       .catch(() => {
@@ -394,23 +386,11 @@ export function DataStoreProvider({ children }: { children: React.ReactNode }) {
         const actor = await getActor();
         const rawData = await actor.getAllData();
         const dataArr = [...rawData] as string[];
-        while (dataArr.length < 10) dataArr.push("");
-        const data = dataArr as [
-          string,
-          string,
-          string,
-          string,
-          string,
-          string,
-          string,
-          string,
-          string,
-          string,
-        ];
+        while (dataArr.length < 11) dataArr.push("");
 
-        const merged = data.map((json, i) =>
+        const merged = dataArr.map((json, i) =>
           pendingWritesRef.current[i] > 0 ? lastJsonRef.current[i] : json,
-        ) as typeof data;
+        );
 
         const hasChanged = merged.some(
           (json, i) => json !== lastJsonRef.current[i],
@@ -508,6 +488,16 @@ export function DataStoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  const updateChangeLogOrders = useCallback(
+    makeUpdater<OrderLogEntry[]>(
+      FIELD_CHANGELOG_ORDERS,
+      setChangeLogOrders,
+      (a, json) => a.setChangeLogOrders(json),
+    ),
+    [],
+  );
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const updateTransactionLog = useCallback(
     makeUpdater<TransactionEntry[]>(
       FIELD_TRANSACTION_LOG,
@@ -544,6 +534,7 @@ export function DataStoreProvider({ children }: { children: React.ReactNode }) {
         toolsData,
         changeLogInventory,
         changeLogBardana,
+        changeLogOrders,
         transactionLog,
         users,
         orderListsData,
@@ -554,6 +545,7 @@ export function DataStoreProvider({ children }: { children: React.ReactNode }) {
         updateToolsData,
         updateChangeLogInventory,
         updateChangeLogBardana,
+        updateChangeLogOrders,
         updateTransactionLog,
         updateUsers,
         updateOrderListsData,

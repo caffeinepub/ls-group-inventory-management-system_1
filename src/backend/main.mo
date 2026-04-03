@@ -61,6 +61,7 @@ actor {
   stable var transactionLogJson : Text = "[]";
   stable var usersJson : Text = "[]";
   stable var orderListsJson : Text = "{}";
+  stable var changeLogOrdersJson : Text = "[]";
 
   // ── Public API ───────────────────────────────────────────────────────────────
   public query func getInventory() : async Text { inventoryJson };
@@ -93,7 +94,10 @@ actor {
   public query func getOrderLists() : async Text { orderListsJson };
   public func setOrderLists(data : Text) : async () { orderListsJson := data };
 
-  public query func getAllData() : async (Text, Text, Text, Text, Text, Text, Text, Text, Text, Text) {
+  public query func getChangeLogOrders() : async Text { changeLogOrdersJson };
+  public func setChangeLogOrders(data : Text) : async () { changeLogOrdersJson := data };
+
+  public query func getAllData() : async (Text, Text, Text, Text, Text, Text, Text, Text, Text, Text, Text) {
     (
       inventoryJson,
       bardanaJson,
@@ -105,6 +109,7 @@ actor {
       transactionLogJson,
       usersJson,
       orderListsJson,
+      changeLogOrdersJson,
     );
   };
 };
