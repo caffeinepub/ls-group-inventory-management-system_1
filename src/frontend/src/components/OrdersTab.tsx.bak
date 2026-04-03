@@ -867,7 +867,6 @@ function ActiveOrdersTable({
           {newRow && (
             <tr className="border-b border-border bg-accent/5">
               <td />
-              <td className="px-3 py-2.5 text-xs text-muted-foreground">—</td>
               <OrderEditCells
                 row={newRow}
                 setRow={setNewRow}
@@ -935,9 +934,6 @@ function ActiveOrdersTable({
                       data-ocid={`orders.row.${idx + 1}`}
                     >
                       <td />
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                        {order.seqId ?? "—"}
-                      </td>
                       {editRow && (
                         <OrderEditCells
                           row={editRow}
@@ -1282,7 +1278,6 @@ interface OrderDetail {
   remaining: number;
   partyName: string;
   rate: string;
-  orderDate: string;
   orderId: string; // internal id for key
 }
 
@@ -1318,7 +1313,6 @@ function OrdersLeftTab({ orders }: { orders: OrderRecord[] }) {
     if (!brandMap.has(brand)) brandMap.set(brand, []);
     brandMap.get(brand)!.push({
       seqId: order.seqId,
-      orderDate: order.date || "",
       remaining,
       partyName: order.partyName || "—",
       rate: order.rate || "—",
@@ -1460,9 +1454,6 @@ function OrdersLeftTab({ orders }: { orders: OrderRecord[] }) {
                                 <th className="text-left py-1.5 pr-4 font-semibold text-orange-900">
                                   Order ID
                                 </th>
-                                <th className="text-left py-1.5 pr-4 font-semibold text-orange-900">
-                                  Order Date
-                                </th>
                                 <th className="text-right py-1.5 pr-4 font-semibold text-orange-900">
                                   Remaining Bags
                                 </th>
@@ -1482,11 +1473,6 @@ function OrdersLeftTab({ orders }: { orders: OrderRecord[] }) {
                                 >
                                   <td className="py-1.5 pr-4 font-bold text-accent">
                                     {detail.seqId ?? "—"}
-                                  </td>
-                                  <td className="py-1.5 pr-4 text-foreground">
-                                    {detail.orderDate
-                                      ? formatDDMMYY(detail.orderDate)
-                                      : "—"}
                                   </td>
                                   <td className="py-1.5 pr-4 text-right font-medium text-orange-700">
                                     {detail.remaining}
