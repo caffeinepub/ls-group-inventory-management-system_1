@@ -2,6 +2,9 @@
  * Central data store backed by the Internet Computer canister.
  * All app data is shared across users and devices via the backend.
  * Polls every 10 seconds for updates from other users/devices.
+ *
+ * Race condition fix: pending writes per field prevent polling from
+ * overwriting optimistic local updates while a write is in flight.
  */
 
 import { createActorWithConfig } from "@/config";
@@ -15,8 +18,7 @@ import {
   useState,
 } from "react";
 
-// ─── New backend JSON API interface ───────────────────────────────────────
-// This matches src/frontend/src/backend.d.ts
+// ─── Backend interface ──────────────────────────────────────────────────────────────
 interface JsonBackend {
   getAllData(): Promise<
     [string, string, string, string, string, string, string, string, string]
@@ -41,7 +43,7 @@ interface JsonBackend {
   setUsers(data: string): Promise<void>;
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Types ─────────────────────────────────────────────────────────────────────────────
 
 export type UserRole = "admin" | "staff";
 
@@ -52,7 +54,6 @@ export interface User {
   blocked?: boolean;
 }
 
-/** Per-plant data for inventory and raw materials */
 export interface PlantData {
   quantities: Record<string, number>;
   customProducts: string[];
@@ -60,7 +61,6 @@ export interface PlantData {
   productOrder: string[];
 }
 
-/** Per-product per-plant bardana calculation entry */
 export interface BardanaEntry {
   initialStock: number;
   stockInWH: number;
@@ -68,17 +68,15 @@ export interface BardanaEntry {
   accumulatedInventory: number;
 }
 
-/** Per-plant metadata for bardana product list */
 export interface BardanaPlantMeta {
   customProducts: string[];
   deletedBuiltins: string[];
   productOrder: string[];
 }
 
-/** Full bardana store structure */
 export interface BardanaStoreData {
-  entries: Record<string, BardanaEntry>; // key = `${plant}__${product}`
-  plantMeta: Record<string, BardanaPlantMeta>; // key = plant name
+  entries: Record<string, BardanaEntry>;
+  plantMeta: Record<string, BardanaPlantMeta>;
 }
 
 export interface DeliveryRecord {
@@ -143,7 +141,7 @@ export interface TransactionEntry {
 
 export type InventoryData = Record<string, PlantData>;
 
-// ─── Defaults ─────────────────────────────────────────────────────────────────
+// ─── Defaults ──────────────────────────────────────────────────────────────────────────
 
 export const DEFAULT_USERS: User[] = [
   { username: "akshay", password: "lsgroup", role: "admin" },
@@ -155,7 +153,18 @@ export const DEFAULT_USERS: User[] = [
 
 const EMPTY_BARDANA_STORE: BardanaStoreData = { entries: {}, plantMeta: {} };
 
-// ─── Backend singleton (lazy) ──────────────────────────────────────────────────
+// Field indices matching the getAllData() tuple order
+const FIELD_INVENTORY = 0;
+const FIELD_BARDANA = 1;
+const FIELD_ORDERS = 2;
+const FIELD_TOOLS = 3;
+const FIELD_RAW_MATERIALS = 4;
+const FIELD_CHANGELOG_INVENTORY = 5;
+const FIELD_CHANGELOG_BARDANA = 6;
+const FIELD_TRANSACTION_LOG = 7;
+const FIELD_USERS = 8;
+
+// ─── Backend singleton (lazy) ──────────────────────────────────────────────────────────
 
 let cachedActor: JsonBackend | null = null;
 let actorPromise: Promise<JsonBackend> | null = null;
@@ -164,14 +173,13 @@ async function getActor(): Promise<JsonBackend> {
   if (cachedActor) return cachedActor;
   if (actorPromise) return actorPromise;
   actorPromise = createActorWithConfig().then((actor) => {
-    // Cast to new JSON-based interface (backend.d.ts)
     cachedActor = actor as unknown as JsonBackend;
     return cachedActor;
   });
   return actorPromise;
 }
 
-// ─── Context ──────────────────────────────────────────────────────────────────
+// ─── Context ─────────────────────────────────────────────────────────────────────────────
 
 interface DataStoreValue {
   isLoading: boolean;
@@ -197,7 +205,7 @@ interface DataStoreValue {
 
 const DataStoreContext = createContext<DataStoreValue | null>(null);
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────────────────────
 
 function parseOrDefault<T>(json: string, fallback: T): T {
   if (!json || json === "null" || json === '""' || json.trim() === "")
@@ -224,7 +232,7 @@ function normalizeBardanaStore(raw: unknown): BardanaStoreData {
   };
 }
 
-// ─── Provider ─────────────────────────────────────────────────────────────────
+// ─── Provider ─────────────────────────────────────────────────────────────────────────────
 
 export function DataStoreProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
@@ -243,8 +251,12 @@ export function DataStoreProvider({ children }: { children: React.ReactNode }) {
   const [transactionLog, setTransactionLog] = useState<TransactionEntry[]>([]);
   const [users, setUsers] = useState<User[]>(DEFAULT_USERS);
 
-  // Track last known JSON for smart polling
+  // Last known JSON from the backend (for change detection)
   const lastJsonRef = useRef<string[]>(Array(9).fill(""));
+
+  // Pending writes counter per field — prevents polling from overwriting
+  // optimistic updates while a backend write is still in flight.
+  const pendingWritesRef = useRef<number[]>(Array(9).fill(0));
 
   const applyAllData = useCallback(
     (
@@ -291,18 +303,25 @@ export function DataStoreProvider({ children }: { children: React.ReactNode }) {
       });
   }, [applyAllData]);
 
-  // Poll every 10 seconds for updates from other users/devices
+  // Poll every 10 seconds for updates from other users/devices.
+  // Fields with pending writes are skipped to avoid reverting optimistic updates.
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
         const actor = await getActor();
         const data = await actor.getAllData();
-        const hasChanged = data.some(
+
+        // Build merged data: skip fields with pending writes (keep local value)
+        const merged = data.map((json, i) =>
+          pendingWritesRef.current[i] > 0 ? lastJsonRef.current[i] : json,
+        ) as typeof data;
+
+        const hasChanged = merged.some(
           (json, i) => json !== lastJsonRef.current[i],
         );
         if (hasChanged) {
-          lastJsonRef.current = [...data];
-          applyAllData(data);
+          lastJsonRef.current = [...merged];
+          applyAllData(merged);
         }
       } catch {
         // silently ignore polling errors
@@ -311,87 +330,112 @@ export function DataStoreProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [applyAllData]);
 
-  // Optimistic setters: update React state immediately, write to backend async
-  const updateInventoryData = useCallback((data: InventoryData) => {
-    setInventoryData(data);
-    const json = JSON.stringify(data);
-    lastJsonRef.current[0] = json;
-    getActor()
-      .then((a) => a.setInventory(json))
-      .catch(() => {});
-  }, []);
+  // ─── Updater factory ────────────────────────────────────────────────────────────
+  // Each updater:
+  // 1. Updates React state immediately (optimistic)
+  // 2. Increments pending-writes counter for this field
+  // 3. Writes to backend
+  // 4. On completion (success or error), decrements pending-writes counter
+  //
+  // While pending > 0, the polling loop skips this field so it cannot
+  // overwrite the optimistic update with stale backend data.
 
-  const updateBardanaData = useCallback((data: BardanaStoreData) => {
-    setBardanaData(data);
-    const json = JSON.stringify(data);
-    lastJsonRef.current[1] = json;
-    getActor()
-      .then((a) => a.setBardana(json))
-      .catch(() => {});
-  }, []);
+  function makeUpdater<T>(
+    fieldIndex: number,
+    setter: React.Dispatch<React.SetStateAction<T>>,
+    backendWrite: (actor: JsonBackend, json: string) => Promise<void>,
+  ) {
+    return (data: T) => {
+      setter(data);
+      const json = JSON.stringify(data);
+      lastJsonRef.current[fieldIndex] = json;
+      pendingWritesRef.current[fieldIndex]++;
+      getActor()
+        .then((a) => backendWrite(a, json))
+        .catch(() => {})
+        .finally(() => {
+          pendingWritesRef.current[fieldIndex]--;
+        });
+    };
+  }
 
-  const updateRawMaterialsData = useCallback((data: InventoryData) => {
-    setRawMaterialsData(data);
-    const json = JSON.stringify(data);
-    lastJsonRef.current[4] = json;
-    getActor()
-      .then((a) => a.setRawMaterials(json))
-      .catch(() => {});
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const updateInventoryData = useCallback(
+    makeUpdater<InventoryData>(FIELD_INVENTORY, setInventoryData, (a, json) =>
+      a.setInventory(json),
+    ),
+    [],
+  );
 
-  const updateOrdersData = useCallback((data: OrderRecord[]) => {
-    setOrdersData(data);
-    const json = JSON.stringify(data);
-    lastJsonRef.current[2] = json;
-    getActor()
-      .then((a) => a.setOrders(json))
-      .catch(() => {});
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const updateBardanaData = useCallback(
+    makeUpdater<BardanaStoreData>(FIELD_BARDANA, setBardanaData, (a, json) =>
+      a.setBardana(json),
+    ),
+    [],
+  );
 
-  const updateToolsData = useCallback((data: ToolRecord[]) => {
-    setToolsData(data);
-    const json = JSON.stringify(data);
-    lastJsonRef.current[3] = json;
-    getActor()
-      .then((a) => a.setTools(json))
-      .catch(() => {});
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const updateRawMaterialsData = useCallback(
+    makeUpdater<InventoryData>(
+      FIELD_RAW_MATERIALS,
+      setRawMaterialsData,
+      (a, json) => a.setRawMaterials(json),
+    ),
+    [],
+  );
 
-  const updateChangeLogInventory = useCallback((data: InventoryLogEntry[]) => {
-    setChangeLogInventory(data);
-    const json = JSON.stringify(data);
-    lastJsonRef.current[5] = json;
-    getActor()
-      .then((a) => a.setChangeLogInventory(json))
-      .catch(() => {});
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const updateOrdersData = useCallback(
+    makeUpdater<OrderRecord[]>(FIELD_ORDERS, setOrdersData, (a, json) =>
+      a.setOrders(json),
+    ),
+    [],
+  );
 
-  const updateChangeLogBardana = useCallback((data: BardanaLogEntry[]) => {
-    setChangeLogBardana(data);
-    const json = JSON.stringify(data);
-    lastJsonRef.current[6] = json;
-    getActor()
-      .then((a) => a.setChangeLogBardana(json))
-      .catch(() => {});
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const updateToolsData = useCallback(
+    makeUpdater<ToolRecord[]>(FIELD_TOOLS, setToolsData, (a, json) =>
+      a.setTools(json),
+    ),
+    [],
+  );
 
-  const updateTransactionLog = useCallback((data: TransactionEntry[]) => {
-    setTransactionLog(data);
-    const json = JSON.stringify(data);
-    lastJsonRef.current[7] = json;
-    getActor()
-      .then((a) => a.setTransactionLog(json))
-      .catch(() => {});
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const updateChangeLogInventory = useCallback(
+    makeUpdater<InventoryLogEntry[]>(
+      FIELD_CHANGELOG_INVENTORY,
+      setChangeLogInventory,
+      (a, json) => a.setChangeLogInventory(json),
+    ),
+    [],
+  );
 
-  const updateUsers = useCallback((data: User[]) => {
-    setUsers(data);
-    const json = JSON.stringify(data);
-    lastJsonRef.current[8] = json;
-    getActor()
-      .then((a) => a.setUsers(json))
-      .catch(() => {});
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const updateChangeLogBardana = useCallback(
+    makeUpdater<BardanaLogEntry[]>(
+      FIELD_CHANGELOG_BARDANA,
+      setChangeLogBardana,
+      (a, json) => a.setChangeLogBardana(json),
+    ),
+    [],
+  );
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const updateTransactionLog = useCallback(
+    makeUpdater<TransactionEntry[]>(
+      FIELD_TRANSACTION_LOG,
+      setTransactionLog,
+      (a, json) => a.setTransactionLog(json),
+    ),
+    [],
+  );
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const updateUsers = useCallback(
+    makeUpdater<User[]>(FIELD_USERS, setUsers, (a, json) => a.setUsers(json)),
+    [],
+  );
 
   return (
     <DataStoreContext.Provider

@@ -6,7 +6,7 @@ import Int "mo:core/Int";
 import Nat "mo:core/Nat";
 
 actor {
-  // ── Legacy type definitions kept for upgrade compatibility ──────────────────
+  // ── Legacy type definitions kept for upgrade compatibility ──────────────────────
   type Product = {
     name : Text;
     var quantity : Float;
@@ -40,7 +40,7 @@ actor {
     user : Text;
   };
 
-  // ── Legacy variables kept for upgrade compatibility (do not remove) ──────────
+  // ── Legacy variables kept for upgrade compatibility (do not remove) ───────────
   var nextOrderId : Nat = 0;
   var nextChangeLogId : Nat = 0;
   let inventory = Map.empty<Text, InventoryEntry>();
@@ -50,7 +50,7 @@ actor {
   let rawMaterials = Map.empty<Text, RawMaterialEntry>();
   let changeLog = Map.empty<Nat, ChangeLog>();
 
-  // ── New stable JSON storage ──────────────────────────────────────────────────
+  // ── Stable JSON storage ─────────────────────────────────────────────────────
   stable var inventoryJson : Text = "{}";
   stable var bardanaJson : Text = "{}";
   stable var ordersJson : Text = "[]";
