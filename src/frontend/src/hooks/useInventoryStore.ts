@@ -490,12 +490,18 @@ export function useOrdersStore() {
     });
 
   const addOrder = (
-    order: Omit<OrderRecord, "id" | "createdAt" | "deliveries">,
+    order: Omit<OrderRecord, "id" | "createdAt" | "deliveries" | "seqId">,
   ): OrderRecord => {
+    // Compute next sequential Order ID (max existing seqId + 1, or 1 if none)
+    const maxSeqId = ordersData.reduce(
+      (max, o) => Math.max(max, o.seqId ?? 0),
+      0,
+    );
     const newOrder: OrderRecord = {
       ...order,
       deliveries: [],
       id: `order_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      seqId: maxSeqId + 1,
       createdAt: Date.now(),
     };
     updateOrdersData([...ordersData, newOrder]);

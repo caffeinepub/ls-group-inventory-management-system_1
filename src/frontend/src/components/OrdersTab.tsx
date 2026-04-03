@@ -714,7 +714,7 @@ function ActiveOrdersTable({
     }
     setSaving(true);
     try {
-      addOrder({
+      const savedOrder = addOrder({
         date: newRow.date,
         orderedBags: newRow.orderedBags,
         brand: newRow.brand,
@@ -732,6 +732,7 @@ function ActiveOrdersTable({
           partyName: newRow.partyName,
           rate: newRow.rate,
           dalalName: newRow.dalalName,
+          seqId: savedOrder.seqId,
         },
         Number(newRow.orderedBags) || 0,
         currentUser?.username ?? "unknown",
@@ -800,6 +801,7 @@ function ActiveOrdersTable({
             partyName: parentOrder.partyName,
             rate: parentOrder.rate,
             dalalName: parentOrder.dalalName,
+            seqId: parentOrder.seqId,
           },
           -(Number(d.deliveredBags) || 0),
           currentUser?.username ?? "unknown",
@@ -813,6 +815,7 @@ function ActiveOrdersTable({
   };
 
   const cols = [
+    "Order ID",
     "Date",
     "Ordered Bags",
     "Delivered Bags",
@@ -992,6 +995,9 @@ function ActiveOrdersTable({
                           )}
                         </button>
                       </td>
+                      <td className="px-3 py-2.5 text-sm font-bold text-accent whitespace-nowrap">
+                        {order.seqId ?? "—"}
+                      </td>
                       <td className="px-3 py-2.5 text-sm whitespace-nowrap">
                         {formatDDMMYY(order.date)}
                       </td>
@@ -1130,7 +1136,19 @@ function CompletedOrdersTable({
   );
   const display = sortOrdersByDateDesc(completed);
 
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  const toggleExpand = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const cols = [
+    "Order ID",
     "Date",
     "Ordered Bags",
     "Delivered Bags",
@@ -1174,6 +1192,7 @@ function CompletedOrdersTable({
         <tbody>
           {display.map((order, idx) => {
             const { delivered, remaining } = getOrderSummary(order);
+            const isExpanded = expandedIds.has(order.id);
             const sortedDeliveries = [...order.deliveries].sort((a, b) =>
               a.date.localeCompare(b.date),
             );
@@ -1181,10 +1200,36 @@ function CompletedOrdersTable({
               <>
                 <tr
                   key={order.id}
-                  className="border-b border-border hover:bg-muted/20 transition-colors"
+                  className="border-b border-border hover:bg-muted/20 transition-colors cursor-pointer"
+                  onClick={() => toggleExpand(order.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ")
+                      toggleExpand(order.id);
+                  }}
                   data-ocid={`orders.row.${idx + 1}`}
                 >
-                  <td />
+                  <td className="px-2 py-2.5 text-center">
+                    <button
+                      type="button"
+                      className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleExpand(order.id);
+                      }}
+                      title={
+                        isExpanded ? "Collapse deliveries" : "Expand deliveries"
+                      }
+                    >
+                      {isExpanded ? (
+                        <ChevronDown className="w-4 h-4 text-indigo-600" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4" />
+                      )}
+                    </button>
+                  </td>
+                  <td className="px-3 py-2.5 text-sm font-bold text-accent whitespace-nowrap">
+                    {order.seqId ?? "—"}
+                  </td>
                   <td className="px-3 py-2.5 text-sm whitespace-nowrap">
                     {formatDDMMYY(order.date)}
                   </td>
@@ -1210,12 +1255,13 @@ function CompletedOrdersTable({
                     </span>
                   </td>
                 </tr>
-                {sortedDeliveries.map((delivery) => (
-                  <DeliverySubRowCompleted
-                    key={delivery.id}
-                    delivery={delivery}
-                  />
-                ))}
+                {isExpanded &&
+                  sortedDeliveries.map((delivery) => (
+                    <DeliverySubRowCompleted
+                      key={delivery.id}
+                      delivery={delivery}
+                    />
+                  ))}
               </>
             );
           })}
@@ -1227,18 +1273,36 @@ function CompletedOrdersTable({
 
 // ─── Orders Left Tab ────────────────────────────────────────────────────────────────────
 
+interface OrderDetail {
+  seqId: number | undefined;
+  remaining: number;
+  partyName: string;
+  rate: string;
+  orderId: string; // internal id for key
+}
+
+interface BrandSummary {
+  brand: string;
+  totalRemaining: number;
+  orderDetails: OrderDetail[];
+}
+
 interface BrokerSummary {
   broker: string;
   totalRemaining: number;
-  brands: Array<{ brand: string; remaining: number }>;
+  brands: BrandSummary[];
 }
 
 function OrdersLeftTab({ orders }: { orders: OrderRecord[] }) {
+  const [expandedBrandKeys, setExpandedBrandKeys] = useState<Set<string>>(
+    new Set(),
+  );
+
   // Only active (non-completed) orders
   const activeOrders = orders.filter((o) => !getOrderSummary(o).isCompleted);
 
-  // Group by broker, accumulate remaining bags per brand
-  const brokerMap = new Map<string, Map<string, number>>();
+  // Group by broker -> brand, keeping per-order detail
+  const brokerMap = new Map<string, Map<string, OrderDetail[]>>();
   for (const order of activeOrders) {
     const { remaining } = getOrderSummary(order);
     if (remaining <= 0) continue;
@@ -1246,19 +1310,42 @@ function OrdersLeftTab({ orders }: { orders: OrderRecord[] }) {
     const brand = order.brand || "Unknown";
     if (!brokerMap.has(broker)) brokerMap.set(broker, new Map());
     const brandMap = brokerMap.get(broker)!;
-    brandMap.set(brand, (brandMap.get(brand) ?? 0) + remaining);
+    if (!brandMap.has(brand)) brandMap.set(brand, []);
+    brandMap.get(brand)!.push({
+      seqId: order.seqId,
+      remaining,
+      partyName: order.partyName || "—",
+      rate: order.rate || "—",
+      orderId: order.id,
+    });
   }
 
   // Build sorted list (descending by total remaining)
   const summaries: BrokerSummary[] = [];
   for (const [broker, brandMap] of brokerMap.entries()) {
-    const brands = Array.from(brandMap.entries())
-      .map(([brand, remaining]) => ({ brand, remaining }))
-      .sort((a, b) => b.remaining - a.remaining);
-    const totalRemaining = brands.reduce((s, b) => s + b.remaining, 0);
+    const brands: BrandSummary[] = [];
+    for (const [brand, details] of brandMap.entries()) {
+      // Sort details by seqId ascending (older orders first)
+      const sorted = [...details].sort(
+        (a, b) => (a.seqId ?? 0) - (b.seqId ?? 0),
+      );
+      const totalRemaining = sorted.reduce((s, d) => s + d.remaining, 0);
+      brands.push({ brand, totalRemaining, orderDetails: sorted });
+    }
+    brands.sort((a, b) => b.totalRemaining - a.totalRemaining);
+    const totalRemaining = brands.reduce((s, b) => s + b.totalRemaining, 0);
     summaries.push({ broker, totalRemaining, brands });
   }
   summaries.sort((a, b) => b.totalRemaining - a.totalRemaining);
+
+  const toggleBrand = (key: string) => {
+    setExpandedBrandKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   if (summaries.length === 0) {
     return (
@@ -1276,7 +1363,8 @@ function OrdersLeftTab({ orders }: { orders: OrderRecord[] }) {
     <div className="p-4 space-y-4">
       <p className="text-xs text-muted-foreground">
         Showing all active orders with remaining undelivered bags, grouped by
-        broker (highest remaining first).
+        broker (highest remaining first). Click a brand row to see order-wise
+        breakdown.
       </p>
       {summaries.map((s, idx) => (
         <div
@@ -1286,11 +1374,9 @@ function OrdersLeftTab({ orders }: { orders: OrderRecord[] }) {
         >
           {/* Broker header */}
           <div className="flex items-center justify-between px-4 py-2.5 bg-muted/50 border-b border-border">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-sm text-foreground">
-                {s.broker}
-              </span>
-            </div>
+            <span className="font-semibold text-sm text-foreground">
+              {s.broker}
+            </span>
             <span className="text-xs font-bold px-2 py-1 rounded-full bg-orange-100 text-orange-700">
               {s.totalRemaining} bags remaining
             </span>
@@ -1299,6 +1385,7 @@ function OrdersLeftTab({ orders }: { orders: OrderRecord[] }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-muted/20 border-b border-border">
+                <th className="w-8" />
                 <th className="text-left px-4 py-2 text-xs font-medium text-muted-foreground">
                   Brand / Variety
                 </th>
@@ -1308,17 +1395,104 @@ function OrdersLeftTab({ orders }: { orders: OrderRecord[] }) {
               </tr>
             </thead>
             <tbody>
-              {s.brands.map((b) => (
-                <tr
-                  key={b.brand}
-                  className="border-b border-border/50 last:border-0 hover:bg-muted/20"
-                >
-                  <td className="px-4 py-2 text-sm">{b.brand}</td>
-                  <td className="px-4 py-2 text-sm text-right font-medium text-orange-600">
-                    {b.remaining}
-                  </td>
-                </tr>
-              ))}
+              {s.brands.map((b) => {
+                const brandKey = `${s.broker}__${b.brand}`;
+                const hasMultiple = b.orderDetails.length > 1;
+                const isExpanded = expandedBrandKeys.has(brandKey);
+                return (
+                  <>
+                    <tr
+                      key={brandKey}
+                      className={`border-b border-border/50 transition-colors ${
+                        hasMultiple
+                          ? "cursor-pointer hover:bg-orange-50/40"
+                          : "hover:bg-muted/20"
+                      }`}
+                      onClick={() => hasMultiple && toggleBrand(brandKey)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ")
+                          hasMultiple && toggleBrand(brandKey);
+                      }}
+                    >
+                      <td className="px-2 py-2 text-center">
+                        {hasMultiple ? (
+                          <button
+                            type="button"
+                            className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleBrand(brandKey);
+                            }}
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="w-3.5 h-3.5 text-orange-600" />
+                            ) : (
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-2 text-sm font-medium">
+                        {b.brand}
+                        {hasMultiple && (
+                          <span className="ml-2 text-xs text-muted-foreground font-normal">
+                            ({b.orderDetails.length} orders)
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-right font-medium text-orange-600">
+                        {b.totalRemaining}
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr className="bg-orange-50/30 border-b border-orange-100">
+                        <td />
+                        <td colSpan={2} className="px-4 py-1">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b border-orange-200">
+                                <th className="text-left py-1.5 pr-4 font-semibold text-orange-900">
+                                  Order ID
+                                </th>
+                                <th className="text-right py-1.5 pr-4 font-semibold text-orange-900">
+                                  Remaining Bags
+                                </th>
+                                <th className="text-left py-1.5 pr-4 font-semibold text-orange-900">
+                                  Party Name
+                                </th>
+                                <th className="text-right py-1.5 font-semibold text-orange-900">
+                                  Rate (Qtl)
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {b.orderDetails.map((detail) => (
+                                <tr
+                                  key={detail.orderId}
+                                  className="border-b border-orange-100/60 last:border-0"
+                                >
+                                  <td className="py-1.5 pr-4 font-bold text-accent">
+                                    {detail.seqId ?? "—"}
+                                  </td>
+                                  <td className="py-1.5 pr-4 text-right font-medium text-orange-700">
+                                    {detail.remaining}
+                                  </td>
+                                  <td className="py-1.5 pr-4 text-foreground">
+                                    {detail.partyName}
+                                  </td>
+                                  <td className="py-1.5 text-right text-foreground">
+                                    {detail.rate}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                );
+              })}
             </tbody>
           </table>
         </div>

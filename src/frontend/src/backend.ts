@@ -34,7 +34,7 @@ export class ExternalBlob {
 }
 
 export interface backendInterface {
-  getAllData(): Promise<[string, string, string, string, string, string, string, string, string, string]>;
+  getAllData(): Promise<[string, string, string, string, string, string, string, string, string, string, string]>;
   getInventory(): Promise<string>;
   setInventory(data: string): Promise<void>;
   getBardana(): Promise<string>;
@@ -55,6 +55,8 @@ export interface backendInterface {
   setUsers(data: string): Promise<void>;
   getOrderLists(): Promise<string>;
   setOrderLists(data: string): Promise<void>;
+  getChangeLogOrders(): Promise<string>;
+  setChangeLogOrders(data: string): Promise<void>;
 }
 
 export class Backend implements backendInterface {
@@ -93,6 +95,8 @@ export class Backend implements backendInterface {
   setUsers(data: string) { return this.call(() => this.actor.setUsers(data)); }
   getOrderLists() { return this.call(() => this.actor.getOrderLists()); }
   setOrderLists(data: string) { return this.call(() => this.actor.setOrderLists(data)); }
+  getChangeLogOrders() { return this.call(() => this.actor.getChangeLogOrders()); }
+  setChangeLogOrders(data: string) { return this.call(() => this.actor.setChangeLogOrders(data)); }
 }
 
 export interface CreateActorOptions {

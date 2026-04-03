@@ -80,6 +80,7 @@ export function useChangeLog() {
       partyName: string;
       rate: string;
       dalalName: string;
+      seqId?: number;
     },
     qtyChange: number,
     userId: string,
@@ -88,6 +89,7 @@ export function useChangeLog() {
     const pruned = prune(changeLogOrders);
     const entry: OrderLogEntry = {
       id: `ord_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      orderId: order.seqId,
       timestamp: Date.now(),
       orderDate: order.date,
       orderedBags: order.orderedBags,

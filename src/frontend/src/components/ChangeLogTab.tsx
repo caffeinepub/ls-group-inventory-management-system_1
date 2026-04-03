@@ -282,6 +282,9 @@ export default function ChangeLogTab() {
                 <thead className="sticky top-0 z-10">
                   <tr className="bg-green-50 border-b border-green-200 backdrop-blur-sm">
                     <th className="text-left px-4 py-2.5 font-semibold text-green-900 whitespace-nowrap">
+                      Order ID
+                    </th>
+                    <th className="text-left px-4 py-2.5 font-semibold text-green-900 whitespace-nowrap">
                       Date
                     </th>
                     <th className="text-left px-4 py-2.5 font-semibold text-green-900 whitespace-nowrap">
@@ -319,6 +322,9 @@ export default function ChangeLogTab() {
                           key={log.id}
                           className="border-b border-border hover:bg-green-50/30 transition-colors"
                         >
+                          <td className="px-4 py-2.5 text-sm font-bold text-accent whitespace-nowrap">
+                            {log.orderId ?? "—"}
+                          </td>
                           <td className="px-4 py-2.5 text-sm font-mono text-muted-foreground whitespace-nowrap">
                             {formatDate(log.timestamp)}
                           </td>
@@ -361,7 +367,7 @@ export default function ChangeLogTab() {
                   ) : (
                     <tr>
                       <td
-                        colSpan={9}
+                        colSpan={10}
                         className="px-4 py-12 text-center text-muted-foreground text-sm"
                         data-ocid="changelog.empty_state"
                       >

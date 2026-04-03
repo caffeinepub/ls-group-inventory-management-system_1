@@ -107,6 +107,7 @@ export interface DeliveryRecord {
 
 export interface OrderRecord {
   id: string;
+  seqId?: number;
   date: string;
   orderedBags: string;
   brand: string;
@@ -150,6 +151,7 @@ export interface BardanaLogEntry {
 
 export interface OrderLogEntry {
   id: string;
+  orderId?: number;
   timestamp: number;
   orderDate: string;
   orderedBags: string;
